@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "talk"
+version = "0.0.1"
+description = "A talk/talkd like program"
+authors = ["Firepup Sixfifty <firepyp650@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+firepup650 = "^1.0.40"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
