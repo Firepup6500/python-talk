@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "talk"
+name = "python-talk"
 version = "0.0.1"
 description = "A talk/talkd like program"
 authors = ["Firepup Sixfifty <firepyp650@gmail.com>"]
