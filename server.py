@@ -8,7 +8,9 @@ class Globals: ...
 
 G = Globals()
 G.uniqueClients = 0
-G.linked = []
+G.serverLinks = 0
+G.servers = {}
+G.clientsConnected = []
 port = 65048
 G.msgs = []
 G.remoteID = "firepi"
@@ -43,14 +45,22 @@ except Exception:
     raise ValueError("Invalid arguments. Please refer to -? for usage.") from None
 
 
+def raw(string: str) -> str:
+    s = string.strip()
+    return f"{s!r}"[1:-1].replace("\\\\", "\\")
+
+def fmt(msg: str, name: str = "", action: bool = False) -> str:
+    if action:
+        return f"* {name}{' '*(20-len(name))}  {msg}"
+    else:
+        return f"  {name}{' '*(20-len(name))}: {msg}"
+
 async def handle_client(reader, writer):
     try:
         global G
-        writer.write(b"Pleass identify yourself. Nick limit is 20 chars.\n")
+        writer.write(b"Please identify yourself. Nick limit is 20 chars.\n")
         await writer.drain()
-        name = repr((await reader.read(20)).decode("utf8").strip())[1:-1].replace(
-            "\\\\", "\\"
-        )
+        name = raw((await reader.read(20)).decode("utf8"))
         if len(name) > 20:
             name = name[
                 :19
@@ -67,49 +77,90 @@ async def handle_client(reader, writer):
             writer.close()
             await writer.wait_closed()
             return
-        if name in G.linked:
+        if name in G.clientsConnected:
             writer.write(f"Nick ({name}) in use\n".encode("utf8"))
             await writer.drain()
             writer.close()
             await writer.wait_closed()
             return
-        G.linked.extend([name])
-        msgIndex = 0
-        G.uniqueClients += 1
-        G.msgs.extend([log(f"{name} has connected to the server.")])
-        while 1:
-            try:
-                buffer = await asyncio.wait_for(reader.read(970), 0.1)
-                request = repr(buffer.decode("utf8").strip())[1:-1].replace(
-                    "\\\\", "\\"
-                )
-                response = None
-                if request.startswith("/mes "):
-                    response = log(f"* {name}'s {request[4:]}")
-                elif request.startswith("/me "):
-                    response = log(f"* {name} {request[3:]}")
-                elif request.startswith("/h"):
-                    writer.write(b"TODO: Command listing\n")
-                    await writer.drain()
-                elif request.startswith("/quit"):
-                    break
-                elif request:
-                    response = log(f"  {name}: {request}")
-                if response:
-                    G.msgs.extend([response])
-            except asyncio.TimeoutError:
-                pass
-            if msgIndex < len(G.msgs):
-                writer.writelines(G.msgs[msgIndex:])
-                msgIndex = len(G.msgs)
+        if not name.startswith("S2S-"):
+            G.clientsConnected.extend([name])
+            msgIndex = 0
+            G.uniqueClients += 1
+            G.msgs.extend([log(f"{name} has connected to the server.")])
+            while 1:
+                try:
+                    buffer = await asyncio.wait_for(reader.read(967), 0.1)
+                    request = raw(buffer.decode("utf8"))
+                    response = None
+                    if request.startswith("/mes "):
+                        response = log(f"* {name}'s {request[5:]}")
+                    elif request.startswith("/me "):
+                        response = log(f"* {name} {request[4:]}")
+                    elif request.startswith("/h"):
+                        writer.write(b"TODO: Command listing\n")
+                        await writer.drain()
+                    elif request.startswith("/quit"):
+                        break
+                    elif request:
+                        response = log(f"  {name}: {request}")
+                    if response:
+                        G.msgs.extend([response])
+                except asyncio.TimeoutError:
+                    pass
+                if msgIndex < len(G.msgs):
+                    writer.writelines(G.msgs[msgIndex:])
+                    msgIndex = len(G.msgs)
             await writer.drain()
-        writer.close()
-        await writer.wait_closed()
-        G.msgs.extend([log(f"{name} has disconnected from the server.")])
-        G.linked.remove(name)
+            writer.close()
+            await writer.wait_closed()
+            G.uniqueClients -= 1
+            G.msgs.extend([log(f"{name} has disconnected from the server.")])
+            G.clientsConnected.remove(name)
+        else:  # This is... probably a server?
+            sName = name[4:]  # Trim off the S2S label
+            log(f"Server link! Link from {sName}")
+            G.serverLinks += 1
+            G.servers[sName] = []
+            msgIndex = 0
+            while 1:
+                client = await reader.read(967)
+                if client == f"END OF CLIENT LISTING FROM {sName}":
+                    break
+                G.msgs.extend([log(f"{client} has connected from {sName}")])
+                G.servers[sName].append(client)
+            G.clientsConnected.extend(G.servers[sName])
+            while 1:
+                buffer = await asyncio.wait_for(reader.read(967), 0.1)
+                request = raw(buffer.decode("utf8"))
+                match buffer[0]:
+                    case "S":  # Server notice
+                        G.msgs.extend([log(buffer[2:])])
+                        writer.write(b"I Mmm... Blueberries\n")
+                        await writer.drain()
+                    case "I":
+                        pass
+                    case "+":
+                        cName = buffer[2:]
+                        G.msgs.extend([log(f"{cName} has connected from {sName}")])
+                        G.clientsConnected.extend([cName])
+                        writer.write(b"I Mmm... Pineapples"\n")
+                        await writer.drain()
+                    case "-":
+                        cName = buffer[2:]
+                        G.clientsConnected.remove(cName)
+                        await writer.drain()
     except ConnectionResetError:
-        G.msgs.extend([log(f"{name} has disconnected from the server.")])
-        G.linked.remove(name)
+        if not name.startswith("S2S-"):
+            G.msgs.extend([log(f"{name} has disconnected from the server.")])
+            G.clientsConnected.remove(name)
+        else:
+            for cName in G.serverLinks[name[4:]]:
+                G.msgs.extend([log(f"{cName}'s server is going down")])
+                G.clientsConnected.remove(cName)
+            G.serverLinks -= 1
+            G.servers.remove(name[4:])
+            G.msgs.extend([log(f"{name[4:]} has de-linked from the network")])
 
 
 async def run_server(port):
