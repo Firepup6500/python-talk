@@ -124,34 +124,63 @@ async def handle_client(reader, writer):
             G.servers[sName] = []
             msgIndex = 0
             while 1:
-                client = await reader.read(967)
+                client = raw((await reader.read(967)).decode("utf8"))
                 if client == f"END OF CLIENT LISTING FROM {sName}":
                     break
                 G.msgs.extend([log(f"{client} has connected from {sName}")])
                 G.servers[sName].append(client)
             G.clientsConnected.extend(G.servers[sName])
             while 1:
-                buffer = await asyncio.wait_for(reader.read(967), 0.1)
-                request = raw(buffer.decode("utf8"))
-                match buffer[0]:
-                    case "S":  # Server notice
-                        G.msgs.extend([log(buffer[2:])])
-                        writer.write(b"I Mmm... Blueberries\n")
-                        await writer.drain()
-                    case "I":
-                        pass
-                    case "+":
-                        cName = buffer[2:]
-                        G.msgs.extend([log(f"{cName} has connected from {sName}")])
-                        G.clientsConnected.extend([cName])
-                        writer.write(b"I Mmm... Pineapples"\n")
-                        await writer.drain()
-                    case "-":
-                        cName = buffer[2:]
-                        G.clientsConnected.remove(cName)
-                        await writer.drain()
+                try:
+                    rawMsg = await asyncio.wait_for(reader.read(967), 0.1)
+                    buffer = raw(rawMsg.decode("utf8"))
+                    match buffer[0]:
+                        case "S":  # Server notice
+                            G.msgs.extend([log(buffer[2:])])
+                            writer.write(b"I Mmm... Blueberries\n")
+                            await writer.drain()
+                        case "I":
+                            pass
+                        case "+":
+                            cName = buffer[2:]
+                            G.msgs.extend([log(f"{cName} has connected from {sName}")])
+                            G.clientsConnected.extend([cName])
+                            writer.write(b"I Mmm... Pineapples\n")
+                            await writer.drain()
+                        case "-":
+                            cName = buffer[2:]
+                            G.msgs.extend([log(f"{cName} has dissconected from {sName}")])
+                            G.clientsConnected.remove(cName)
+                            writer.write(b"I Mmm... Bananas\n")
+                            await writer.drain()
+                        case "M":
+                            cName = buffer[2:].split("|", 1)[0]
+                            message = buffer[2:].split("|", 1)[1]
+                            G.msgs.extend([log(f"  {cName}: {message}")])
+                            writer.write(b'I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace.')
+                            await writer.drain()
+                        case "A":
+                            cName = buffer[2:].split("|", 1)[0]
+                            message = buffer[2:].split("|", 1)[1]
+                            G.msgs.extend([log(f"* {cName} {message}")])
+                            writer.write(b'I Mmm... Strawberries\n')
+                            await writer.drain()
+                        case "Q":
+                            break
+                        case _:
+                            writer.write(b'S Your server is doing drugs over here, sending me bullshit messages man - A fellow server\n')
+                            await writer.drain()
+                except TimeoutError:
+                    pass
+            for cName in G.serverLinks[sName]:
+                G.msgs.extend([log(f"{cName}'s server is going down")])
+                G.clientsConnected.remove(cName)
+            G.serverLinks -= 1
+            G.servers.remove(sName)
+            G.msgs.extend([log(f"{sName} has de-linked from the network")])
     except ConnectionResetError:
         if not name.startswith("S2S-"):
+            G.uniqueClients -= 1
             G.msgs.extend([log(f"{name} has disconnected from the server.")])
             G.clientsConnected.remove(name)
         else:
