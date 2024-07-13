@@ -17,6 +17,9 @@ G.remoteID = "firepi"
 G.event = asyncio.Event()
 G.loop = asyncio.get_event_loop()
 G.interruptCount = 0
+G.killList = {}
+G.outboundLinks = []
+G.S2SLogs = []
 saveLogs = True
 # Try to load a message log, if one exists
 try:
@@ -31,10 +34,8 @@ except Exception:
     )
 try:
     for arg in sys.argv:
-        if arg.startswith("--port"):
-            port = int(arg.lstrip("-port= "))
-        elif arg.startswith("-p"):
-            port = int(arg.lstrip("-p= "))
+        if arg.startswith("--port") or arg.startswith("-p"):
+            port = int(arg.lstrip("-port="))
         elif arg in ["-n", "--no-cache"]:
             log("Explicitly erasing cached messages")
             G.msgs = []
@@ -42,8 +43,12 @@ try:
             print("TODO: Help menu soon")
             exit(0)
         elif arg in ["-l", "--no-logs"]:
-            log("Disabling saving of logs!")
+            log("Explicitly disabling saving of logs!")
             saveLogs = False
+        elif arg.startswith("--link"):
+            G.outboundLinks.append((arg[6:], int(arg.split(":")[1])))
+        else:
+            log(f"Unrecognized argument {arg}!", "WARN")
 except Exception:
     sys.tracebacklimit = 0
     raise ValueError("Invalid arguments. Please refer to -? for usage.") from None
@@ -145,13 +150,15 @@ async def handle_client(reader, writer):
             G.serverLinks += 1
             G.servers[sName] = []
             msgIndex = 0
+            writer.write("I Awaiting client listing.\n")
             while 1:
                 client = raw((await reader.read(967)).decode("utf8"))
                 if client == f"END OF CLIENT LISTING FROM {sName}":
                     break
-                if name in G.servers[sName] or name in G.clientsConnected:
+                if client in G.servers[sName] or client in G.clientsConnected:
                     writer.write(b"K Client rejected: Already exists\n")
                     await writer.drain()
+                    continue
                 writer.write(b"I Added client.\n")
                 await writer.drain()
                 G.msgs.append(log(f"{client} has connected from {sName}"))
@@ -165,7 +172,6 @@ async def handle_client(reader, writer):
                         case "S":  # Server notice
                             G.msgs.extend([log(buffer[2:])])
                             writer.write(b"I Mmm... Blueberries\n")
-                            await writer.drain()
                         case "I":
                             pass
                         case "+":
@@ -177,17 +183,14 @@ async def handle_client(reader, writer):
                                 G.servers[sName].append(cName)
                                 G.clientsConnected.append(cName)
                                 writer.write(b"I Mmm... Pineapples\n")
-                                await writer.drain()
                             else:
                                 writer.write(b"K Nick Collision")
-                                await writer.drain()
                         case "-":
                             cName = buffer[2:]
                             G.msgs.append(log(f"{cName} has disconnected from {sName}"))
                             G.servers[sName].remove(cName)
                             G.clientsConnected.remove(cName)
                             writer.write(b"I Mmm... Bananas\n")
-                            await writer.drain()
                         case "M":
                             cName = buffer[2:].split("|", 1)[0]
                             message = buffer[2:].split("|", 1)[1]
@@ -195,40 +198,40 @@ async def handle_client(reader, writer):
                             writer.write(
                                 b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace."
                             )
-                            await writer.drain()
                         case "A":
                             cName = buffer[2:].split("|", 1)[0]
                             message = buffer[2:].split("|", 1)[1]
                             G.msgs.append(log(f"* {cName} {message}"))
                             writer.write(b"I Mmm... Strawberries\n")
-                            await writer.drain()
                         case "Q":
                             break
                         case "K":
                             cName = buffer[2:]
                             G.killList[cName] = True
                             writer.write(b"I Mmm... Blood\n")
-                            await writer.drain()
                         case _:
                             writer.write(
                                 b"S Your server is doing drugs over here, sending me bullshit messages man - A fellow server\n"
                             )
-                            await writer.drain()
+                    await writer.drain()
                 except TimeoutError:
                     pass
-            for cName in G.serverLinks[sName]:
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+            for cName in G.servers[sName]:
                 G.msgs.append(log(f"{cName}'s server is going down"))
                 G.clientsConnected.remove(cName)
             G.serverLinks -= 1
             G.servers.remove(sName)
             G.msgs.append(log(f"{sName} has de-linked from the network"))
-    except [ConnectionResetError, BrokenPipeError]:
+    except (ConnectionResetError, BrokenPipeError):
         if not name.startswith("S2S-"):
             G.uniqueClients -= 1
             G.msgs.append(log(f"{name} has disconnected from the server."))
             G.clientsConnected.remove(name)
         else:
-            for cName in G.serverLinks[name[4:]]:
+            for cName in G.servers[name[4:]]:
                 G.msgs.append(log(f"{cName}'s server is going down"))
                 try:
                     G.clientsConnected.remove(cName)
@@ -239,24 +242,44 @@ async def handle_client(reader, writer):
             G.msgs.append(log(f"{name[4:]} has de-linked from the network"))
 
 
-async def run_server(port):
+async def connectServer(hostname: str, port: int):
+    reader, writer = await asyncio.open_connection(hostname, port)
+    await reader.read(1024)
+    writer.write(f"S2S-{G.remoteID}\n".encode("utf8"))
+    await writer.drain()
+    await reader.read(1024)
+    for client in G.clientsConnected:
+        writer.write(f"{client}\n".encode("utf8"))
+        await writer.drain()
+        response = await reader.read(1024)
+        if response.startswith("K"):
+            G.killList[client] = True
+    writer.write(f"END OF CLIENT LISTING FROM {G.remoteID}".encode("utf8"))
+    await writer.drain()
+    # recieve client list from the other server
+    # copy the handling code from the S2S section above
+
+
+async def runServer(port: int):
     global G
     server = await asyncio.start_server(handle_client, "0.0.0.0", port)
     log(f"Listening on port {port}...")
     G.msgs.append(log("Server startup"))
+    links = []
+    for hostname, portNum in G.outboundLinks:
+        links.append(connectServer(hostname, portNum))
     crash = False
     try:
-        log("Waiting on the Interrupt Event to be set...")
-        await G.event.wait()
-        log("Interrupt Event has been set, shutting down normally")
+        links.append(G.event.wait())
+        await asyncio.gather(*links)
     except Exception:
         crash = True
-        G.msgs.extend([log("Server crash", level="FATAL")[1:]])
+        G.msgs.append(log("Server crash", level="FATAL")[1:])
         log("Shutting down from Exception")
         # TODO: Add format_exc here
     finally:
         if not crash:
-            G.msgs.extend([log("Server shutdown")])
+            G.msgs.append(log("Server shutdown"))
         log("Kicking all clients as we go down")
         server.close()
         # server.abort_clients()
