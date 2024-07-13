@@ -17,6 +17,7 @@ G.remoteID = "firepi"
 G.event = asyncio.Event()
 G.loop = asyncio.get_event_loop()
 G.interruptCount = 0
+saveLogs = True
 # Try to load a message log, if one exists
 try:
     G.msgs = __import__("cache").msgs
@@ -31,15 +32,18 @@ except Exception:
 try:
     for arg in sys.argv:
         if arg.startswith("--port"):
-            port = int(arg.lstrip("-port="))
+            port = int(arg.lstrip("-port= "))
         elif arg.startswith("-p"):
-            port = int(arg.lstrip("-p="))
+            port = int(arg.lstrip("-p= "))
         elif arg in ["-n", "--no-cache"]:
             log("Explicitly erasing cached messages")
             G.msgs = []
         elif arg in ["-?", "-h", "--help"]:
             print("TODO: Help menu soon")
             exit(0)
+        elif arg in ["-l", "--no-logs"]:
+            log("Disabling saving of logs!")
+            saveLogs = False
 except Exception:
     sys.tracebacklimit = 0
     raise ValueError("Invalid arguments. Please refer to -? for usage.") from None
@@ -47,13 +51,19 @@ except Exception:
 
 def raw(string: str) -> str:
     s = string.strip()
-    return f"{s!r}"[1:-1].replace("\\\\", "\\")
+    s = f"{s!r}"[1:-1].replace("\\\\", "\\")
+    if '"' in s:
+        return s.replace("\\'", "'")
+    else:
+        return s
+
 
 def fmt(msg: str, name: str = "", action: bool = False) -> str:
     if action:
         return f"* {name}{' '*(20-len(name))}  {msg}"
     else:
         return f"  {name}{' '*(20-len(name))}: {msg}"
+
 
 async def handle_client(reader, writer):
     try:
@@ -68,7 +78,7 @@ async def handle_client(reader, writer):
         try:
             await asyncio.wait_for(
                 reader.read(), 0.01
-            )  # Silently consume the excess useename data
+            )  # Silently consume the excess username data
         except asyncio.TimeoutError:
             pass
         if not name:
@@ -102,6 +112,13 @@ async def handle_client(reader, writer):
                         await writer.drain()
                     elif request.startswith("/quit"):
                         break
+                    elif request.startswith("/afk"):
+                        if len(request) > 5:
+                            response = log(f"* {name} is afk to {request[4:]}")
+                        else:
+                            response = log(f"* {name} is afk")
+                    elif request.startswith("/back"):
+                        response = log(f"* {name} is back")
                     elif request:
                         response = log(f"  {name}: {request}")
                     if response:
@@ -110,12 +127,17 @@ async def handle_client(reader, writer):
                     pass
                 if msgIndex < len(G.msgs):
                     writer.writelines(G.msgs[msgIndex:])
+                    await writer.drain()
                     msgIndex = len(G.msgs)
+                if name in G.killList and G.killList[name]:
+                    writer.write(b"Your client has been killed by the server\n")
+                    G.killList[name] = False
+                    break
             await writer.drain()
             writer.close()
             await writer.wait_closed()
             G.uniqueClients -= 1
-            G.msgs.extend([log(f"{name} has disconnected from the server.")])
+            G.msgs.append(log(f"{name} has disconnected from the server."))
             G.clientsConnected.remove(name)
         else:  # This is... probably a server?
             sName = name[4:]  # Trim off the S2S label
@@ -127,7 +149,12 @@ async def handle_client(reader, writer):
                 client = raw((await reader.read(967)).decode("utf8"))
                 if client == f"END OF CLIENT LISTING FROM {sName}":
                     break
-                G.msgs.extend([log(f"{client} has connected from {sName}")])
+                if name in G.servers[sName] or name in G.clientsConnected:
+                    writer.write(b"K Client rejected: Already exists\n")
+                    await writer.drain()
+                writer.write(b"I Added client.\n")
+                await writer.drain()
+                G.msgs.append(log(f"{client} has connected from {sName}"))
                 G.servers[sName].append(client)
             G.clientsConnected.extend(G.servers[sName])
             while 1:
@@ -143,60 +170,80 @@ async def handle_client(reader, writer):
                             pass
                         case "+":
                             cName = buffer[2:]
-                            G.msgs.extend([log(f"{cName} has connected from {sName}")])
-                            G.clientsConnected.extend([cName])
-                            writer.write(b"I Mmm... Pineapples\n")
-                            await writer.drain()
+                            if cName not in G.clientsConnected:
+                                G.msgs.append(
+                                    log(f"{cName} has connected from {sName}")
+                                )
+                                G.servers[sName].append(cName)
+                                G.clientsConnected.append(cName)
+                                writer.write(b"I Mmm... Pineapples\n")
+                                await writer.drain()
+                            else:
+                                writer.write(b"K Nick Collision")
+                                await writer.drain()
                         case "-":
                             cName = buffer[2:]
-                            G.msgs.extend([log(f"{cName} has dissconected from {sName}")])
+                            G.msgs.append(log(f"{cName} has disconnected from {sName}"))
+                            G.servers[sName].remove(cName)
                             G.clientsConnected.remove(cName)
                             writer.write(b"I Mmm... Bananas\n")
                             await writer.drain()
                         case "M":
                             cName = buffer[2:].split("|", 1)[0]
                             message = buffer[2:].split("|", 1)[1]
-                            G.msgs.extend([log(f"  {cName}: {message}")])
-                            writer.write(b'I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace.')
+                            G.msgs.append(log(f"  {cName}: {message}"))
+                            writer.write(
+                                b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace."
+                            )
                             await writer.drain()
                         case "A":
                             cName = buffer[2:].split("|", 1)[0]
                             message = buffer[2:].split("|", 1)[1]
-                            G.msgs.extend([log(f"* {cName} {message}")])
-                            writer.write(b'I Mmm... Strawberries\n')
+                            G.msgs.append(log(f"* {cName} {message}"))
+                            writer.write(b"I Mmm... Strawberries\n")
                             await writer.drain()
                         case "Q":
                             break
+                        case "K":
+                            cName = buffer[2:]
+                            G.killList[cName] = True
+                            writer.write(b"I Mmm... Blood\n")
+                            await writer.drain()
                         case _:
-                            writer.write(b'S Your server is doing drugs over here, sending me bullshit messages man - A fellow server\n')
+                            writer.write(
+                                b"S Your server is doing drugs over here, sending me bullshit messages man - A fellow server\n"
+                            )
                             await writer.drain()
                 except TimeoutError:
                     pass
             for cName in G.serverLinks[sName]:
-                G.msgs.extend([log(f"{cName}'s server is going down")])
+                G.msgs.append(log(f"{cName}'s server is going down"))
                 G.clientsConnected.remove(cName)
             G.serverLinks -= 1
             G.servers.remove(sName)
-            G.msgs.extend([log(f"{sName} has de-linked from the network")])
-    except ConnectionResetError:
+            G.msgs.append(log(f"{sName} has de-linked from the network"))
+    except [ConnectionResetError, BrokenPipeError]:
         if not name.startswith("S2S-"):
             G.uniqueClients -= 1
-            G.msgs.extend([log(f"{name} has disconnected from the server.")])
+            G.msgs.append(log(f"{name} has disconnected from the server."))
             G.clientsConnected.remove(name)
         else:
             for cName in G.serverLinks[name[4:]]:
-                G.msgs.extend([log(f"{cName}'s server is going down")])
-                G.clientsConnected.remove(cName)
+                G.msgs.append(log(f"{cName}'s server is going down"))
+                try:
+                    G.clientsConnected.remove(cName)
+                except Exception:  # Crash during connection sequence?
+                    pass
             G.serverLinks -= 1
             G.servers.remove(name[4:])
-            G.msgs.extend([log(f"{name[4:]} has de-linked from the network")])
+            G.msgs.append(log(f"{name[4:]} has de-linked from the network"))
 
 
 async def run_server(port):
     global G
     server = await asyncio.start_server(handle_client, "0.0.0.0", port)
     log(f"Listening on port {port}...")
-    G.msgs.extend([log("Server startup")])
+    G.msgs.append(log("Server startup"))
     crash = False
     try:
         log("Waiting on the Interrupt Event to be set...")
@@ -213,9 +260,12 @@ async def run_server(port):
         log("Kicking all clients as we go down")
         server.close()
         # server.abort_clients()
-        with open("cache.py", "w") as cache:
-            cache.write(f"msgs = {G.msgs}\n")
-        log("Saved logs, exiting now.")
+        if saveLogs:
+            with open("cache.py", "w") as cache:
+                cache.write(f"msgs = {G.msgs}\n")
+            log("Saved logs, exiting now.")
+        else:
+            log("Not saving logs, exiting now.")
 
 
 class ServerInterruptException(KeyboardInterrupt): ...
