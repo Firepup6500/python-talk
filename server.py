@@ -70,7 +70,7 @@ def fmt(msg: str, name: str = "", action: bool = False) -> str:
         return f"  {name}{' '*(20-len(name))}: {msg}"
 
 
-async def handle_client(reader, writer):
+async def handleClient(reader, writer):
     try:
         global G
         writer.write(b"Please identify yourself. Nick limit is 20 chars.\n")
@@ -150,19 +150,28 @@ async def handle_client(reader, writer):
             G.serverLinks += 1
             G.servers[sName] = []
             msgIndex = 0
-            writer.write("I Awaiting client listing.\n")
+            writer.write("I am awaiting your client listing.\n")
             while 1:
-                client = raw((await reader.read(967)).decode("utf8"))
+                client = raw((await reader.read(1024)).decode("utf8"))
                 if client == f"END OF CLIENT LISTING FROM {sName}":
                     break
                 if client in G.servers[sName] or client in G.clientsConnected:
                     writer.write(b"K Client rejected: Already exists\n")
                     await writer.drain()
                     continue
-                writer.write(b"I Added client.\n")
+                writer.write(b"I added that client.\n")
                 await writer.drain()
                 G.msgs.append(log(f"{client} has connected from {sName}"))
                 G.servers[sName].append(client)
+            writer.write(f"{G.remoteID}\n".encode("utf8"))
+            await writer.drain()
+            await reader.read()
+            for client in G.clientsConnected:
+                writer.write(f"{client}\n".encode("utf8"))
+                resp = raw((await reader.read(1024)).decode("utf8"))
+                if resp.startswith("K"):
+                    G.killList[client] = True
+            writer.write(f"END OF CLIENT LISTING FROM {G.remoteID}\n".encode("utf8"))
             G.clientsConnected.extend(G.servers[sName])
             while 1:
                 try:
@@ -184,7 +193,7 @@ async def handle_client(reader, writer):
                                 G.clientsConnected.append(cName)
                                 writer.write(b"I Mmm... Pineapples\n")
                             else:
-                                writer.write(b"K Nick Collision")
+                                writer.write(f"K {cName}".encode("utf8"))
                         case "-":
                             cName = buffer[2:]
                             G.msgs.append(log(f"{cName} has disconnected from {sName}"))
@@ -251,18 +260,69 @@ async def connectServer(hostname: str, port: int):
     for client in G.clientsConnected:
         writer.write(f"{client}\n".encode("utf8"))
         await writer.drain()
-        response = await reader.read(1024)
-        if response.startswith("K"):
+        resp = raw((await reader.read(1024)).decode("utf8"))
+        if resp.startswith("K"):
             G.killList[client] = True
-    writer.write(f"END OF CLIENT LISTING FROM {G.remoteID}".encode("utf8"))
+    writer.write(f"END OF CLIENT LISTING FROM {G.remoteID}\n".encode("utf8"))
     await writer.drain()
+    rID = raw((await reader.read(1024)).decode("utf8"))
+    G.serverLinks += 1
+    G.servers.append(rID)
+    writer.write(b"I recieved your remote ID, now awaiting client listing\n")
     # recieve client list from the other server
-    # copy the handling code from the S2S section above
+    while 1:
+        client = raw((await reader.read(1024)).decode("utf8"))
+        if client == f"END OF CLIENT LISTING FROM {rID}":
+            break
+        if client in G.servers[rID] or client in G.clientsConnected:
+            writer.write(b"K Client rejected: Already exists\n")
+            await writer.drain()
+            continue
+        writer.write(b"I added that client.\n")
+        await writer.drain()
+        G.msgs.append(log(f"{client} has connected from {rID}"))
+        G.servers[rID].append(client)
+    G.clientsConnected.extend(G.servers[rID])
+    while 1:
+        try:
+            rawMsg = await asyncio.wait_for(reader.read(967), 0.1)
+            buffer = raw(rawMsg.decode("utf8"))
+            match buffer[0]:
+                case "S":
+                    G.msgs.extend([log(buffer[2:])])
+                    writer.write(b"I Mmm... Blueberries\n")
+                case "I":
+                    pass
+                case "+":
+                    cName = buffer[2:]
+                    if cName not in G.clientsConnected:
+                        G.msgs.append(log(f"{cName} has connected from {rID}"))
+                        G.servers[rID].append(cName)
+                        G.clientsConnected.append(cName)
+                        writer.write(b"I Mmm... Pineapples\n")
+                    else:
+                        writer.write(f"K {cName}\n".encode("utf8"))
+                case "-":
+                    cName = buffer[2:]
+                    G.msgs.append(log(f"{cName} has disconnected from {sName}"))
+                    G.servers[rID].remove(cName)
+                    G.clientsConnected.remove(cName)
+                case "M":
+                    cName = buffer[2:].split("|", 1)[0]
+                    message = buffer[2:].split("|", 1)[1]
+                    G.msgs.append(log(f" {cName}: {message}"))
+                    writer.write(
+                        b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace."
+                    )
+                case _:
+                    pass
+        except Exception:
+            pass
 
 
 async def runServer(port: int):
     global G
-    server = await asyncio.start_server(handle_client, "0.0.0.0", port)
+    server = await asyncio.start_server(handleClient, "0.0.0.0", port)
     log(f"Listening on port {port}...")
     G.msgs.append(log("Server startup"))
     links = []
@@ -304,4 +364,4 @@ def interruptCatch(s, f):
 
 
 signal.signal(signal.SIGINT, interruptCatch)
-asyncio.run(run_server(port))
+asyncio.run(runServer(port))
