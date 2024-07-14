@@ -220,7 +220,7 @@ async def handleClient(reader, writer):
                             writer.write(b"I Mmm... Blood\n")
                         case _:
                             writer.write(
-                                b"S Your server is doing drugs over here, sending me bullshit messages man - A fellow server\n"
+                                f"S Your server is doing drugs over here, sending me bullshit messages man - {G.remoteID}, A fellow server\n".encode("utf8")
                             )
                     await writer.drain()
                 except TimeoutError:
@@ -283,41 +283,77 @@ async def connectServer(hostname: str, port: int):
         G.msgs.append(log(f"{client} has connected from {rID}"))
         G.servers[rID].append(client)
     G.clientsConnected.extend(G.servers[rID])
-    while 1:
-        try:
-            rawMsg = await asyncio.wait_for(reader.read(967), 0.1)
-            buffer = raw(rawMsg.decode("utf8"))
-            match buffer[0]:
-                case "S":
-                    G.msgs.extend([log(buffer[2:])])
-                    writer.write(b"I Mmm... Blueberries\n")
-                case "I":
-                    pass
-                case "+":
-                    cName = buffer[2:]
-                    if cName not in G.clientsConnected:
-                        G.msgs.append(log(f"{cName} has connected from {rID}"))
-                        G.servers[rID].append(cName)
-                        G.clientsConnected.append(cName)
-                        writer.write(b"I Mmm... Pineapples\n")
-                    else:
-                        writer.write(f"K {cName}\n".encode("utf8"))
-                case "-":
-                    cName = buffer[2:]
-                    G.msgs.append(log(f"{cName} has disconnected from {sName}"))
-                    G.servers[rID].remove(cName)
-                    G.clientsConnected.remove(cName)
-                case "M":
-                    cName = buffer[2:].split("|", 1)[0]
-                    message = buffer[2:].split("|", 1)[1]
-                    G.msgs.append(log(f" {cName}: {message}"))
-                    writer.write(
-                        b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace."
-                    )
-                case _:
-                    pass
-        except Exception:
-            pass
+    try:
+        while 1:
+            try:
+                rawMsg = await asyncio.wait_for(reader.read(967), 0.1)
+                buffer = raw(rawMsg.decode("utf8"))
+                match buffer[0]:
+                    case "S":
+                        G.msgs.extend([log(buffer[2:])])
+                        writer.write(b"I Mmm... Blueberries\n")
+                    case "I":
+                        pass
+                    case "+":
+                        cName = buffer[2:]
+                        if cName not in G.clientsConnected:
+                            G.msgs.append(log(f"{cName} has connected from {rID}"))
+                            G.servers[rID].append(cName)
+                            G.clientsConnected.append(cName)
+                            writer.write(b"I Mmm... Pineapples\n")
+                        else:
+                            writer.write(f"K {cName}\n".encode("utf8"))
+                    case "-":
+                        cName = buffer[2:]
+                        G.msgs.append(log(f"{cName} has disconnected from {sName}"))
+                        G.servers[rID].remove(cName)
+                        G.clientsConnected.remove(cName)
+                    case "M":
+                        cName = buffer[2:].split("|", 1)[0]
+                        message = buffer[2:].split("|", 1)[1]
+                        G.msgs.append(log(f" {cName}: {message}"))
+                        writer.write(
+                            b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace."
+                        )
+                    case "A":
+                        cName = buffer[2:].split("|", 1)[0]
+                        message = buffer[2:].split("|", 1)[1]
+                        G.msgs.append(log(f"* {cName} {message}"))
+                        writer.write(b"I Mmm... Strawberries\n")
+                    case "Q":
+                        break
+                    case "K":
+                        cName = buffer[2:]
+                        G.killList[cName] = True
+                        writer.write(b"I Mmm... Blood\n")
+                    case _:
+                        writer.write(
+                            f"S Your server is doing drugs over here, sending me bullshit messages man - {G.remoteID}, A fellow server\n".encode(
+                                "utf8"
+                            )
+                        )
+                await writer.drain()
+            except TimeoutError:
+                pass
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+            for cName in G.servers[rID]:
+                G.msgs.append(log(f"{cName}'s server is going down"))
+                G.clientsConnected.remove(cName)
+            G.serverLinks -= 1
+            G.servers.remove(rID)
+            G.msgs.append(log(f"{rID} has de-linked from the network"))
+    except (ConnectionResetError, BrokenPipeError):
+        for cName in G.servers[rID]:
+            G.msgs.append(log(f"{cName}'s server is going down"))
+            try:
+                G.clientsConnected.remove(cName)
+            except Exception:
+                pass
+        G.serverLinks -= 1
+        G.servers.remove(rID)
+        G.msgs.append(log(f"{rID} has de-linked from the network"))
 
 
 async def runServer(port: int):
