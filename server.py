@@ -427,7 +427,7 @@ async def connectServer(hostname: str, port: int):
                     case "M":
                         cName = buffer[2:].split("|", 1)[0]
                         message = buffer[2:].split("|", 1)[1]
-                        G.msgs.append(log(f" {cName}: {message}"))
+                        G.msgs.append(log(f"  {cName}: {message}"))
                         G.S2SLogs.append(("M", (cName, message), rID))
                         writer.write(
                             b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace.\n"
