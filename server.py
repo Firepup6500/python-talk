@@ -367,7 +367,7 @@ async def connectServer(hostname: str, port: int):
     rID = raw((await reader.read(16)).decode("utf8"))
     try:
         await asyncio.wait_for(reader.read(1024), 0.1)
-    except TimoutError:
+    except TimeoutError:
         pass
     if G.servers.get(rID, False) != False:
         writer.close()
