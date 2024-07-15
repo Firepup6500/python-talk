@@ -477,7 +477,7 @@ async def connectServer(hostname: str, port: int):
             G.msgs.append(log(f"{cName}'s server is going down"))
             G.clientsConnected.remove(cName.lower())
         G.serverLinks -= 1
-        G.servers.remove(rID)
+        del G.servers[rID]
         G.msgs.append(log(f"{rID} has de-linked from the network"))
     except (ConnectionResetError, BrokenPipeError, IndexError):
         for cName in G.servers[rID]:
@@ -487,7 +487,7 @@ async def connectServer(hostname: str, port: int):
             except Exception:
                 pass
         G.serverLinks -= 1
-        G.servers.remove(rID)
+        del G.servers[rID]
         G.msgs.append(log(f"{rID} has de-linked from the network"))
 
 
