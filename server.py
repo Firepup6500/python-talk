@@ -80,7 +80,7 @@ except Exception:
     raise ValueError("Invalid arguments. Please refer to --help for usage.") from None
 
 if not saveLogs:
-    G.msgs.apppend(
+    G.msgs.append(
         b"[00-00-0000 00:00:00] Notice: Logging is disabled on this server instance!\n"
     )
 
