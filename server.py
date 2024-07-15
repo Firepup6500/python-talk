@@ -1,7 +1,6 @@
 import os, sys, asyncio, re, signal
 from platform import uname
 from traceback import format_exc
-from firepup650 import console
 from logs import log
 
 
