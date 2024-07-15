@@ -1,4 +1,5 @@
 import os, sys, asyncio, re, signal
+from platform import uname
 from traceback import format_exc
 from firepup650 import console
 from logs import log
@@ -14,7 +15,7 @@ G.servers = {}
 G.clientsConnected = []
 port = 65048
 G.msgs = []
-G.remoteID = "pyTalkServ"
+G.remoteID = uname().node
 G.event = asyncio.Event()
 G.loop = asyncio.get_event_loop()
 G.interruptCount = 0
