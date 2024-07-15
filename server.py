@@ -1,4 +1,5 @@
 import os, sys, asyncio, re, signal
+from traceback import format_exc
 from firepup650 import console
 from logs import log
 
@@ -21,7 +22,7 @@ G.killList = {}
 G.outboundLinks = []
 G.S2SLogs = []
 saveLogs = True
-address = '0.0.0.0'
+address = "0.0.0.0"
 # Try to load a message log, if one exists
 try:
     G.msgs = __import__("cache").msgs
@@ -48,9 +49,9 @@ try:
             log("Explicitly disabling saving of logs!")
             saveLogs = False
         elif arg.startswith("--link"):
-            G.outboundLinks.append((arg[6:], int(arg.split(":")[1])))
+            G.outboundLinks.append((arg[7:].split(":")[0], int(arg.split(":")[1])))
         elif arg.startswith("--hostname"):
-            G.remoteID = arg[10:]
+            G.remoteID = arg[11:]
         elif arg.startswith("--address"):
             address = arg[9:]
         else:
@@ -117,7 +118,7 @@ async def handleClient(reader, writer):
                     response = None
                     if request.startswith("/mes "):
                         response = log(f"* {name}'s {request[5:]}")
-                        G.S2SLogs.append(("A", (name+"'s", request[5:]), G.remoteID))
+                        G.S2SLogs.append(("A", (name + "'s", request[5:]), G.remoteID))
                     elif request.startswith("/me "):
                         response = log(f"* {name} {request[4:]}")
                         G.S2SLogs.append(("A", (name, request[4:]), G.remoteID))
@@ -129,7 +130,9 @@ async def handleClient(reader, writer):
                     elif request.startswith("/afk"):
                         if len(request) > 5:
                             response = log(f"* {name} is afk to {request[5:]}")
-                            G.S2SLogs.append(("A", (name, f"is afk to {request[5:]}"), G.remoteID))
+                            G.S2SLogs.append(
+                                ("A", (name, f"is afk to {request[5:]}"), G.remoteID)
+                            )
                         else:
                             response = log(f"* {name} is afk")
                             G.S2SLogs.append(("A", (name, "is afk"), G.remoteID))
@@ -160,7 +163,7 @@ async def handleClient(reader, writer):
             G.S2SLogs.append(("-", name, G.remoteID))
         else:  # This is... probably a server?
             sName = name[4:]  # Trim off the S2S label
-            log(f"Server link! Link from {sName}")
+            G.msgs.append(log(f"{sName} has linked to the network"))
             G.serverLinks += 1
             G.servers[sName] = []
             msgIndex = 0
@@ -169,7 +172,10 @@ async def handleClient(reader, writer):
                 client = raw((await reader.read(1024)).decode("utf8"))
                 if client == f"END OF CLIENT LISTING FROM {sName}":
                     break
-                if client.lower() in G.servers[sName] or client.lower() in G.clientsConnected:
+                if (
+                    client.lower() in G.servers[sName]
+                    or client.lower() in G.clientsConnected
+                ):
                     writer.write(b"K Client rejected: Already exists\n")
                     await writer.drain()
                     continue
@@ -224,7 +230,7 @@ async def handleClient(reader, writer):
                             cName = buffer[2:].split("|", 1)[0]
                             message = buffer[2:].split("|", 1)[1]
                             G.msgs.append(log(f"  {cName}: {message}"))
-                            G.S2SLogs(("M", (cName, message), sName))
+                            G.S2SLogs.append(("M", (cName, message), sName))
                             writer.write(
                                 b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace.\n"
                             )
@@ -232,7 +238,7 @@ async def handleClient(reader, writer):
                             cName = buffer[2:].split("|", 1)[0]
                             message = buffer[2:].split("|", 1)[1]
                             G.msgs.append(log(f"* {cName} {message}"))
-                            G.S2SLogs(("A", (cName, message), sName))
+                            G.S2SLogs.append(("A", (cName, message), sName))
                             writer.write(b"I Mmm... Strawberries\n")
                         case "Q":
                             break
@@ -242,7 +248,9 @@ async def handleClient(reader, writer):
                             writer.write(b"I Mmm... Blood\n")
                         case _:
                             writer.write(
-                                f"S Your server is doing drugs over here, sending me bullshit messages man - {G.remoteID}, A fellow server\n".encode("utf8")
+                                f"S Your server is doing drugs over here, sending me bullshit messages man - {G.remoteID}, A fellow server\n".encode(
+                                    "utf8"
+                                )
                             )
                     await writer.drain()
                 except TimeoutError:
@@ -253,9 +261,15 @@ async def handleClient(reader, writer):
                     if server != sName:
                         match type:
                             case "A":
+                                nick, msg = data
+                                writer.write(f"A {nick}|{msg}\n".encode("utf8"))
                             case "M":
+                                nick, msg = data
+                                writer.write(f"M {nick}|{msg}\n".encode("utf8"))
                             case "+":
+                                writer.write(f"+ {data}\n".encode("utf8"))
                             case "-":
+                                writer.write(f"- {data}\n".encode("utf8"))
                             case _:
                                 pass
                     await writer.drain()
@@ -270,7 +284,11 @@ async def handleClient(reader, writer):
             G.serverLinks -= 1
             del G.servers[sName]
             G.msgs.append(log(f"{sName} has de-linked from the network"))
-    except (ConnectionResetError, BrokenPipeError):
+    except (
+        ConnectionResetError,
+        BrokenPipeError,
+        IndexError,
+    ):  # Don't ask. IndexError needs to be caught here too.
         if not name.startswith("S2S-"):
             G.uniqueClients -= 1
             G.msgs.append(log(f"{name} has disconnected from the server."))
@@ -281,7 +299,7 @@ async def handleClient(reader, writer):
                 G.msgs.append(log(f"{cName}'s server is going down"))
                 try:
                     G.clientsConnected.remove(cName.lower())
-                    G.S2SLogs.append("-", cName, name[4:]))
+                    G.S2SLogs.append(("-", cName, name[4:]))
                 except Exception:  # Crash during connection sequence?
                     pass
             G.serverLinks -= 1
@@ -290,6 +308,7 @@ async def handleClient(reader, writer):
 
 
 async def connectServer(hostname: str, port: int):
+    global G
     reader, writer = await asyncio.open_connection(hostname, port)
     await reader.read(1024)
     writer.write(f"S2S-{G.remoteID}\n".encode("utf8"))
@@ -304,8 +323,9 @@ async def connectServer(hostname: str, port: int):
     writer.write(f"END OF CLIENT LISTING FROM {G.remoteID}\n".encode("utf8"))
     await writer.drain()
     rID = raw((await reader.read(1024)).decode("utf8"))
+    G.msgs.append(log(f"{rID} has linked to the network"))
     G.serverLinks += 1
-    G.servers.append(rID)
+    G.servers[rID] = []
     writer.write(b"I recieved your remote ID, now awaiting client listing\n")
     await writer.drain()
     # recieve client list from the other server
@@ -322,6 +342,7 @@ async def connectServer(hostname: str, port: int):
         G.msgs.append(log(f"{client} has connected from {rID}"))
         G.servers[rID].append(client.lower())
     G.clientsConnected.extend(G.servers[rID])
+    msgInd = len(G.S2SLogs)
     try:
         while 1:
             try:
@@ -337,6 +358,7 @@ async def connectServer(hostname: str, port: int):
                         cName = buffer[2:]
                         if cName.lower() not in G.clientsConnected:
                             G.msgs.append(log(f"{cName} has connected from {rID}"))
+                            G.S2SLogs.append(("+", cName, rID))
                             G.servers[rID].append(cName.lower())
                             G.clientsConnected.append(cName.lower())
                             writer.write(b"I Mmm... Pineapples\n")
@@ -344,19 +366,22 @@ async def connectServer(hostname: str, port: int):
                             writer.write(f"K {cName}\n".encode("utf8"))
                     case "-":
                         cName = buffer[2:]
-                        G.msgs.append(log(f"{cName} has disconnected from {sName}"))
+                        G.msgs.append(log(f"{cName} has disconnected from {rID}"))
                         G.servers[rID].remove(cName.lower())
                         G.clientsConnected.remove(cName.lower())
+                        G.S2SLogs.append(("-", cName, rID))
                     case "M":
                         cName = buffer[2:].split("|", 1)[0]
                         message = buffer[2:].split("|", 1)[1]
                         G.msgs.append(log(f" {cName}: {message}"))
+                        G.S2SLogs.append(("M", (cName, message), rID))
                         writer.write(
                             b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace.\n"
                         )
                     case "A":
                         cName = buffer[2:].split("|", 1)[0]
                         message = buffer[2:].split("|", 1)[1]
+                        G.S2SLogs.append(("A", (cName, message), rID))
                         G.msgs.append(log(f"* {cName} {message}"))
                         writer.write(b"I Mmm... Strawberries\n")
                     case "Q":
@@ -374,16 +399,34 @@ async def connectServer(hostname: str, port: int):
                 await writer.drain()
             except TimeoutError:
                 pass
-            await writer.drain()
-            writer.close()
-            await writer.wait_closed()
-            for cName in G.servers[rID]:
-                G.msgs.append(log(f"{cName}'s server is going down"))
-                G.clientsConnected.remove(cName.lower())
-            G.serverLinks -= 1
-            G.servers.remove(rID)
-            G.msgs.append(log(f"{rID} has de-linked from the network"))
-    except (ConnectionResetError, BrokenPipeError):
+            while msgInd < len(G.S2SLogs):
+                type, data, server = G.S2SLogs[msgInd]
+                if server != rID:
+                    match type:
+                        case "A":
+                            nick, msg = data
+                            writer.write(f"A {nick}|{msg}\n".encode("utf8"))
+                        case "M":
+                            nick, msg = data
+                            writer.write(f"M {nick}|{msg}\n".encode("utf8"))
+                        case "+":
+                            writer.write(f"+ {data}\n".encode("utf8"))
+                        case "-":
+                            writer.write(f"- {data}\n".encode("utf8"))
+                        case _:
+                            pass
+                await writer.drain()
+                msgInd += 1
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+        for cName in G.servers[rID]:
+            G.msgs.append(log(f"{cName}'s server is going down"))
+            G.clientsConnected.remove(cName.lower())
+        G.serverLinks -= 1
+        G.servers.remove(rID)
+        G.msgs.append(log(f"{rID} has de-linked from the network"))
+    except (ConnectionResetError, BrokenPipeError, IndexError):
         for cName in G.servers[rID]:
             G.msgs.append(log(f"{cName}'s server is going down"))
             try:
@@ -409,9 +452,11 @@ async def runServer(address: str, port: int):
         await asyncio.gather(*links)
     except Exception:
         crash = True
-        G.msgs.append(log("Server crash", level="FATAL")[1:])
-        log("Shutting down from Exception")
-        # TODO: Add format_exc here
+        G.msgs.append(log("Server crash", "FATAL")[1:])
+        log("Shutting down from Exception", "FATAL")
+        Err = format_exc()
+        for line in Err.split("\n"):
+            log(line, "ERROR")
     finally:
         if not crash:
             G.msgs.append(log("Server shutdown"))
