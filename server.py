@@ -196,7 +196,7 @@ async def handleClient(reader, writer):
         else:  # This is... probably a server?
             sName = name[4:]  # Trim off the S2S label
             if (
-                G.servers.get(sName, False) == False
+                G.servers.get(sName, False) != False
             ):  # Have to explicitly check, empty list is False, but does not == False
                 writer.close()
                 await writer.wait_closed()
@@ -369,7 +369,7 @@ async def connectServer(hostname: str, port: int):
         await asyncio.wait_for(reader.read(1024), 0.1)
     except TimoutError:
         pass
-    if G.servers.get(rID, False) == False:
+    if G.servers.get(rID, False) != False:
         writer.close()
         await writer.wait_closed()
         return
