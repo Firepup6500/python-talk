@@ -36,15 +36,33 @@ except Exception:
         level="WARN",
     )
 try:
-    sys.argv.pop(0)  # Ignore the filename
+    filename = sys.argv.pop(0)  # Ignore the filename
     for arg in sys.argv:
         if arg.startswith("--port") or arg.startswith("-p"):
             port = int(arg.lstrip("-port="))
-        elif arg in ["-n", "--no-cache"]:
+        elif arg in ["-c", "--no-cache"]:
             log("Explicitly erasing cached messages")
             G.msgs = []
         elif arg in ["-?", "-h", "--help"]:
-            print("TODO: Help menu soon")
+            print(
+                f"""python3 {filename} <args>
+All arguments are optional!
+All areguments are *expected* to only be specified once, if it appears mutliple times, the last one takes priority.
+The exception to the above rule is `--link`, since you could want to link to multiple other servers.
+Accepted arguments:
+-?, -h, --help              - Triggers this help dialog
+-l, --no-logs               - Disables the saving of logs when the server shuts down
+-c, --no-cache              - Disables the loading of cached messages when the server boots
+-p<number>, --port=<number> - Sets the port for the server to use, defaults to `65048`
+--link=<host>:<port>        - Establishes an S2S link with remote server <host> on port <port> when the server starts up
+--hostname=<string>         - Sets the hostname for this server to use when talking to other servers. Defaults to the current system's hostname (limit of 16 chars)
+--address=<IP>              - Sets the IP to listen on, defaults to all addresses (0.0.0.0)
+
+Examples:
+python3 {filename} --hostname=Fun-chat --link=chat.example.com:65048 --port=92628
+python3 {filename} --no-logs --no-cache
+python3 {filename} --address=127.0.0.1 -l -p=7288"""
+            )
             exit(0)
         elif arg in ["-l", "--no-logs"]:
             log("Explicitly disabling saving of logs!")
@@ -59,7 +77,12 @@ try:
             log(f"Unrecognized argument {arg}!", "WARN")
 except Exception:
     sys.tracebacklimit = 0
-    raise ValueError("Invalid arguments. Please refer to -? for usage.") from None
+    raise ValueError("Invalid arguments. Please refer to --help for usage.") from None
+
+if not saveLogs:
+    G.msgs.apppend(
+        b"[00-00-0000 00:00:00] Notice: Logging is disabled on this server instance!\n"
+    )
 
 
 def raw(string: str) -> str:
@@ -124,7 +147,15 @@ async def handleClient(reader, writer):
                         response = log(f"* {name} {request[4:]}")
                         G.S2SLogs.append(("A", (name, request[4:]), G.remoteID))
                     elif request.startswith("/h"):
-                        writer.write(b"TODO: Command listing\n")
+                        writer.write(
+                            b"""Command List:
+/me <action>  - Sends a special message so it looks like you did <action>
+/mes <action> - Same as /me, but adds a 's onto your nick
+/afk [reason] - Optional reason, short hand for `/me is afk [to [reason]]`
+/h, /help     - Triggers this command listing
+/back         - Shorthand for `/me is back`
+/quit         - Disconnects you from the server\n"""
+                        )
                         await writer.drain()
                     elif request.startswith("/quit"):
                         break
@@ -164,6 +195,16 @@ async def handleClient(reader, writer):
             G.S2SLogs.append(("-", name, G.remoteID))
         else:  # This is... probably a server?
             sName = name[4:]  # Trim off the S2S label
+            if (
+                G.servers.get(sName, False) == False
+            ):  # Have to explicitly check, empty list is False, but does not == False
+                writer.close()
+                await writer.wait_closed()
+                return  # Server is already "linked", drop the connection
+            if G.remoteID == sName:  # Hey! you can't *also* be ***me***!
+                writer.close()
+                await writer.wait_closed()
+                return  # drop "us"
             G.msgs.append(log(f"{sName} has linked to the network"))
             G.serverLinks += 1
             G.servers[sName] = []
@@ -323,7 +364,19 @@ async def connectServer(hostname: str, port: int):
             G.killList[client.lower()] = True
     writer.write(f"END OF CLIENT LISTING FROM {G.remoteID}\n".encode("utf8"))
     await writer.drain()
-    rID = raw((await reader.read(1024)).decode("utf8"))
+    rID = raw((await reader.read(16)).decode("utf8"))
+    try:
+        await asyncio.wait_for(reader.read(1024), 0.1)
+    except TimoutError:
+        pass
+    if G.servers.get(rID, False) == False:
+        writer.close()
+        await writer.wait_closed()
+        return
+    if G.remoteID == rID:
+        writer.close()
+        await writer.wait_closed()
+        return
     G.msgs.append(log(f"{rID} has linked to the network"))
     G.serverLinks += 1
     G.servers[rID] = []
