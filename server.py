@@ -50,8 +50,9 @@ try:
             log("Explicitly erasing cached messages")
             G.msgs = []
         elif arg in ["-?", "-h", "--help"]:
+            filename = filename if filename.startswith("./") else "python3 "+filename
             print(
-                f"""python3 {filename} <args>
+                f"""{filename} <args>
 All arguments are optional!
 All areguments are *expected* to only be specified once, if it appears mutliple times, the last one takes priority.
 The exception to the above rule is `--link`, since you could want to link to multiple other servers.
@@ -66,9 +67,9 @@ Accepted arguments:
 --cwlgd                     - Crashes the server when outbound links go down
 
 Examples:
-python3 {filename} --hostname=Fun-chat --link=chat.example.com:65048 --port=92628
-python3 {filename} --no-logs --no-cache
-python3 {filename} --address=127.0.0.1 -l -p=7288"""
+{filename} --hostname=Fun-chat --link=chat.example.com:65048 --port=92628
+{filename} --no-logs --no-cache
+{filename} --address=127.0.0.1 -l -p=7288"""
             )
             exit(0)
         elif arg in ["-l", "--no-logs"]:
