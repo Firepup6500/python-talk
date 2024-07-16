@@ -170,6 +170,7 @@ Please note that this is not network level statistics.\n""".encode(
                                 "utf8"
                             )
                         )
+                        await writer.drain()
                     elif request.startswith("/quit"):
                         break
                     elif request.startswith("/afk"):
