@@ -7,9 +7,9 @@ from logs import log
 class Globals: ...
 
 
-# The below line is a hacky fix for python 3.10 asyncio
+# The two below lines are a hacky fix for python 3.10 asyncio
 TimoutError = TimeoutError
-TimeoutError = (TimoutError, aysncio.exceptions.TimeoutError)
+TimeoutError = (TimoutError, asyncio.exceptions.TimeoutError)
 G = Globals()
 G.uniqueClients = 0
 G.servers = {}
