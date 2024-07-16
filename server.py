@@ -72,7 +72,7 @@ python3 {filename} --address=127.0.0.1 -l -p=7288"""
             G.outboundLinks.append((arg[7:].split(":")[0], int(arg.split(":")[1])))
         elif arg.startswith("--hostname"):
             G.remoteID = arg[11:]
-            if not G.remoteID:
+            if not G.remoteID or len(G.remoteID)>16:
                 raise ValueError
         elif arg.startswith("--address"):
             address = arg[9:]
@@ -86,7 +86,8 @@ if not saveLogs:
     G.msgs.append(
         b"[00-00-0000 00:00:00] Notice: Logging is disabled on this server instance!\n"
     )
-
+if len(G.remoteID)>16:
+    G.remoteID = G.remoteID[:15]
 
 def raw(string: str) -> str:
     s = string.strip()
