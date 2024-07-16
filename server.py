@@ -208,7 +208,7 @@ async def handleClient(reader, writer):
                 return  # drop "us"
             G.msgs.append(log(f"{sName} has linked to the network"))
             G.serverLinks += 1
-            G.servers[sName] = []
+            G.servers[sName] = {}
             msgIndex = 0
             writer.write(b"I am awaiting your client listing.\n")
             while 1:
@@ -401,7 +401,7 @@ async def connectServer(hostname: str, port: int):
         return
     G.msgs.append(log(f"{rID} has linked to the network"))
     G.serverLinks += 1
-    G.servers[rID] = []
+    G.servers[rID] = {}
     writer.write(b"I recieved your remote ID, now awaiting client listing\n")
     await writer.drain()
     # recieve client list from the other server
