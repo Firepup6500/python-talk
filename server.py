@@ -4,6 +4,9 @@ from traceback import format_exc
 from logs import log
 
 
+class LinksDownException(Exception): ...
+
+
 class Globals: ...
 
 
@@ -23,6 +26,7 @@ G.interruptCount = 0
 G.killList = {}
 G.outboundLinks = []
 G.S2SLogs = []
+G.cwlgd = False
 saveLogs = True
 address = "0.0.0.0"
 # Try to load a message log, if one exists
@@ -58,6 +62,7 @@ Accepted arguments:
 --link=<host>:<port>        - Establishes an S2S link with remote server <host> on port <port> when the server starts up
 --hostname=<string>         - Sets the hostname for this server to use when talking to other servers. Defaults to the current system's hostname (limit of 16 chars)
 --address=<IP>              - Sets the IP to listen on, defaults to all addresses (0.0.0.0)
+--cwlgd                     - Crashes the server when outbound links go down
 
 Examples:
 python3 {filename} --hostname=Fun-chat --link=chat.example.com:65048 --port=92628
@@ -76,6 +81,9 @@ python3 {filename} --address=127.0.0.1 -l -p=7288"""
                 raise ValueError
         elif arg.startswith("--address"):
             address = arg[9:]
+        elif arg.startswith("--cwlgd"):
+            G.cwlgd = True
+            log("Server will crasg when outbound links go down!", "WARN")
         else:
             log(f"Unrecognized argument {arg}!", "WARN")
 except Exception:
@@ -537,6 +545,8 @@ async def connectServer(hostname: str, port: int):
                             pass
                 await writer.drain()
                 msgInd += 1
+        if G.cwlgd:
+            raise LinksDownException
         await writer.drain()
         writer.close()
         await writer.wait_closed()
@@ -546,6 +556,8 @@ async def connectServer(hostname: str, port: int):
         del G.servers[rID]
         G.msgs.append(log(f"{rID} has de-linked from the network"))
     except (ConnectionResetError, BrokenPipeError, IndexError):
+        if G.cwlgd:
+            raise LinksDownException
         for cName in G.servers[rID]:
             G.msgs.append(log(f"{cName}'s server is going down"))
             try:
