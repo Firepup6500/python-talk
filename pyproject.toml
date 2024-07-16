@@ -4,10 +4,9 @@ version = "0.0.1"
 description = "A talk/talkd like program"
 authors = ["Firepup Sixfifty <firepyp650@gmail.com>"]
 readme = "README.md"
-package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.10"
 firepup650 = "^1.0.40"
 
 

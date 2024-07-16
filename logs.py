@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-from datetime import datetime as dt, UTC
+from datetime import datetime as dt, timezone as tz
 from sys import stdout, stderr
 from typing import Union
 
@@ -15,8 +15,8 @@ def log(
     else:
         stream = stdout
     if time == "now":
-        dtime = dt.now(UTC)
-        dtime.replace(tzinfo=UTC)
+        dtime = dt.now(tz.utc)
+        dtime.replace(tzinfo=tz.utc)
     elif type(time) == str:
         raise ValueError('Only "now" is an accepted string argument for time')
     elif type(time) == dt:
