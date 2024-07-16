@@ -118,7 +118,7 @@ async def handleClient(reader, writer):
             await asyncio.wait_for(
                 reader.read(), 0.01
             )  # Silently consume the excess username data
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
         if not name:
             writer.write(b"Nice try. Actually set a nick.\n")
@@ -193,7 +193,7 @@ Please note that this is not network level statistics.\n""".encode(
                         G.S2SLogs.append(("M", (name, request), G.remoteID))
                     if response:
                         G.msgs.append(response)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
                 if msgIndex < len(G.msgs):
                     writer.writelines(G.msgs[msgIndex:])
