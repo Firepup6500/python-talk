@@ -1,0 +1,38 @@
+[Unit]
+Description=firepup's python-talk
+
+[Service]
+DynamicUser=yes
+WorkingDirectory=/opt/python-talk
+ExecStart=/usr/bin/python3 server.py --link=37.27.51.34:65048 --no-logs --no-cache --cwlgd
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+RestrictSUIDSGID=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=ptraceable
+ProcSubset=pid
+PrivateTmp=true
+CapabilityBoundingSet=
+PrivateDevices=true
+ProtectClock=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+SystemCallArchitectures=native
+# python.
+MemoryDenyWriteExecute=false
+RestrictNamespaces=true
+ProtectHostname=true
+LockPersonality=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_INET
+RestrictRealtime=true
+PrivateUsers=true
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+#!/bin/sh
+. /etc/rc.subr
+name="python_talk"
+start_cmd="${name}_start"
+stop_cmd=":"
+rcvar=python_talk_enable
+load_rc_config $name
+: ${python_talk_enable:=no}
+python_talk_start() {
+	cd /usr/src/python-talk
+	(while true; do python3 server.py --link=37.27.51.34:65048 --no-log --no-cache --cwlgd 2>&1 >> /var/log/python-talk.log; done) &
+}
+run_rc_command "$1"
