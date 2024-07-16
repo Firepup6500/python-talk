@@ -311,7 +311,12 @@ Please note that this is not network level statistics.\n""".encode(
                             break
                         case "K":
                             cName = buffer[2:]
-                            G.killList[cName] = True
+                            if G.clientsConnected[cName.lower()] == G.remoteID:
+                                G.killList[cName.lower()] = True
+                            else:
+                                G.servers[G.clientsConnected[cName.lower()]][
+                                    cName.lower()
+                                ] = True
                             writer.write(b"I Mmm... Blood\n")
                         case _:
                             writer.write(
@@ -481,7 +486,12 @@ async def connectServer(hostname: str, port: int):
                         break
                     case "K":
                         cName = buffer[2:]
-                        G.killList[cName.lower()] = True
+                        if G.clientsConnected[cName.lower()] == G.remoteID:
+                            G.killList[cName.lower()] = True
+                        else:
+                            G.servers[G.clientsConnected[cName.lower()]][
+                                cName.lower()
+                            ] = True
                         writer.write(b"I Mmm... Blood\n")
                     case _:
                         writer.write(
