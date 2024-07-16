@@ -163,7 +163,7 @@ async def handleClient(reader, writer):
                             f"""Server stats:
 Linked servers:    {len(G.servers)}
 Connected clients: {G.uniqueClients}
-Total Clients:     {len(G.connectedClients)}
+Total Clients:     {len(G.clientsConnected)}
 Messages sent:     {len(msgs)}
 
 Please note that this is not network level statistics.\n""".encode(
