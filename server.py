@@ -9,7 +9,6 @@ class Globals: ...
 
 G = Globals()
 G.uniqueClients = 0
-G.serverLinks = 0
 G.servers = {}
 G.clientsConnected = {}
 port = 65048
@@ -155,9 +154,22 @@ async def handleClient(reader, writer):
 /afk [reason] - Optional reason, short hand for `/me is afk [to [reason]]`
 /h, /help     - Triggers this command listing
 /back         - Shorthand for `/me is back`
+/stats        - Sends you some server stats
 /quit         - Disconnects you from the server\n"""
                         )
                         await writer.drain()
+                    elif request.startswith("/stats"):
+                        writer.write(
+                            f"""Server stats:
+Linked servers:    {len(G.servers)}
+Connected clients: {G.uniqueClients}
+Total Clients:     {len(G.connectedClients)}
+Messages sent:     {len(msgs)}
+
+Please note that this is not network level statistics.\n""".encode(
+                                "utf8"
+                            )
+                        )
                     elif request.startswith("/quit"):
                         break
                     elif request.startswith("/afk"):
@@ -207,7 +219,6 @@ async def handleClient(reader, writer):
                 await writer.wait_closed()
                 return  # drop "us"
             G.msgs.append(log(f"{sName} has linked to the network"))
-            G.serverLinks += 1
             G.servers[sName] = {}
             msgIndex = 0
             writer.write(b"I am awaiting your client listing.\n")
@@ -342,7 +353,6 @@ async def handleClient(reader, writer):
                 G.msgs.append(log(f"{cName}'s server is going down"))
                 G.S2SLogs.append(("-", cName, sName))
                 del G.clientsConnected[cName.lower()]
-            G.serverLinks -= 1
             del G.servers[sName]
             G.msgs.append(log(f"{sName} has de-linked from the network"))
     except (
@@ -363,7 +373,6 @@ async def handleClient(reader, writer):
                     G.S2SLogs.append(("-", cName, name[4:]))
                 except Exception:  # Crash during connection sequence?
                     pass
-            G.serverLinks -= 1
             del G.servers[name[4:]]
             G.msgs.append(log(f"{name[4:]} has de-linked from the network"))
 
@@ -400,7 +409,6 @@ async def connectServer(hostname: str, port: int):
         await writer.wait_closed()
         return
     G.msgs.append(log(f"{rID} has linked to the network"))
-    G.serverLinks += 1
     G.servers[rID] = {}
     writer.write(b"I recieved your remote ID, now awaiting client listing\n")
     await writer.drain()
@@ -513,7 +521,6 @@ async def connectServer(hostname: str, port: int):
         for cName in G.servers[rID]:
             G.msgs.append(log(f"{cName}'s server is going down"))
             del G.clientsConnected[cName.lower()]
-        G.serverLinks -= 1
         del G.servers[rID]
         G.msgs.append(log(f"{rID} has de-linked from the network"))
     except (ConnectionResetError, BrokenPipeError, IndexError):
@@ -523,7 +530,6 @@ async def connectServer(hostname: str, port: int):
                 del G.clientsConnected[cName.lower()]
             except Exception:
                 pass
-        G.serverLinks -= 1
         del G.servers[rID]
         G.msgs.append(log(f"{rID} has de-linked from the network"))
 
