@@ -238,7 +238,6 @@ Please note that this is not network level statistics.\n""".encode(
                 await writer.drain()
                 G.msgs.append(log(f"{client} has connected from {sName}"))
                 G.servers[sName][client.lower()] = False
-                G.clientsConnected[client.lower()] = sName
                 G.S2SLogs.append(("+", client, sName))
             writer.write(f"{G.remoteID}\n".encode("utf8"))
             await writer.drain()
@@ -251,9 +250,11 @@ Please note that this is not network level statistics.\n""".encode(
                     if G.clientsConnected[client] == G.remoteID:
                         G.killList[client] = True
                     else:
-                        G.servers[G.clientsConnected[client]] = True
+                        G.servers[G.clientsConnected[client]][client] = True
             writer.write(f"END OF CLIENT LISTING FROM {G.remoteID}\n".encode("utf8"))
             await writer.drain()
+            for client in G.servers[sName]:
+                G.clientsConnected[client] = sName
             msgInd = len(G.S2SLogs)
             while 1:
                 try:
@@ -279,7 +280,7 @@ Please note that this is not network level statistics.\n""".encode(
                                 writer.write(f"K {cName}\n".encode("utf8"))
                         case "-":
                             cName = buffer[2:]
-                            if G.clientsConnected.get(cName, None) == sName:
+                            if G.clientsConnected.get(cName.lower(), None) == sName:
                                 G.msgs.append(
                                     log(f"{cName} has disconnected from {sName}")
                                 )
@@ -289,7 +290,7 @@ Please note that this is not network level statistics.\n""".encode(
                                 writer.write(b"I Mmm... Bananas\n")
                             else:
                                 writer.write(
-                                    f"Your server is LYING about who is connected to it. - {G.remoteID}, a fellow server\n".encode(
+                                    f"S Your server is LYING about who is connected to it. - {G.remoteID}, a fellow server\n".encode(
                                         "utf8"
                                     )
                                 )
@@ -323,6 +324,10 @@ Please note that this is not network level statistics.\n""".encode(
                                 f"S Your server is doing drugs over here, sending me bullshit messages man - {G.remoteID}, A fellow server\n".encode(
                                     "utf8"
                                 )
+                            )
+                            log(
+                                f"Recieved invalid message ({buffer}) from {sName}",
+                                "WARN",
                             )
                     await writer.drain()
                 except TimeoutError:
@@ -398,7 +403,7 @@ async def connectServer(hostname: str, port: int):
             if G.clientsConnected[client] == G.remoteID:
                 G.killList[client] = True
             else:
-                G.servers[G.clientsConnected[client]] = True
+                G.servers[G.clientsConnected[client]][client] = True
     writer.write(f"END OF CLIENT LISTING FROM {G.remoteID}\n".encode("utf8"))
     await writer.drain()
     rID = raw((await reader.read(16)).decode("utf8"))
@@ -457,14 +462,14 @@ async def connectServer(hostname: str, port: int):
                             writer.write(f"K {cName}\n".encode("utf8"))
                     case "-":
                         cName = buffer[2:]
-                        if G.clientsConnected.get(cName, None) == rID:
+                        if G.clientsConnected.get(cName.lower(), None) == rID:
                             G.msgs.append(log(f"{cName} has disconnected from {rID}"))
                             del G.servers[rID][cName.lower()]
                             del G.clientsConnected[cName.lower()]
                             G.S2SLogs.append(("-", cName, rID))
                         else:
                             writer.write(
-                                f"Your server is LYING about who is connected to it. - {G.remoteID}, a fellow server\n".encode(
+                                f"S Your server is LYING about who is connected to it. - {G.remoteID}, a fellow server\n".encode(
                                     "utf8"
                                 )
                             )
@@ -499,6 +504,7 @@ async def connectServer(hostname: str, port: int):
                                 "utf8"
                             )
                         )
+                        log(f"Recieved invalid message ({buffer}) from {sName}", "WARN")
                 await writer.drain()
             except TimeoutError:
                 pass
