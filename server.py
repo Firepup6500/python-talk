@@ -120,6 +120,7 @@ def fmt(msg: str, name: str = "", action: bool = False) -> str:
 
 async def handleClient(reader, writer):
     try:
+        name = ""
         global G
         writer.write(b"Please identify yourself. Nick limit is 20 chars.\n")
         await writer.drain()
@@ -384,6 +385,8 @@ Please note that this is not network level statistics.\n""".encode(
             del G.servers[sName]
             G.msgs.append(log(f"{sName} has de-linked from the network"))
     except DisconnectErrors:
+        if not name:
+            return
         if not name.startswith("S2S-"):
             G.uniqueClients -= 1
             G.msgs.append(log(f"{name} has disconnected from the server."))
