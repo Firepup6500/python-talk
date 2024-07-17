@@ -330,7 +330,9 @@ Please note that this is not network level statistics.\n""".encode(
                             break
                         case "K":
                             cName = buffer[2:]
-                            if G.clientsConnected[cName.lower()] == G.remoteID:
+                            if not G.clientsConnected.get(cName.lower(), False):
+                                pass  # They don't exist, safe to ignore
+                            elif G.clientsConnected[cName.lower()] == G.remoteID:
                                 G.killList[cName.lower()] = True
                             else:
                                 G.servers[G.clientsConnected[cName.lower()]][
@@ -510,7 +512,9 @@ async def connectServer(hostname: str, port: int):
                             break
                         case "K":
                             cName = buffer[2:]
-                            if G.clientsConnected[cName.lower()] == G.remoteID:
+                            if not G.clientsConnected.get(cName.lower(), False):
+                                pass  # They don't exist, safe to ignore
+                            elif G.clientsConnected[cName.lower()] == G.remoteID:
                                 G.killList[cName.lower()] = True
                             else:
                                 G.servers[G.clientsConnected[cName.lower()]][
