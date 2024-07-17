@@ -12,8 +12,8 @@ class Globals: ...
 
 
 # The two below lines are a hacky fix for python 3.10 asyncio
-TimoutError = TimeoutError
-TimeoutError = (TimoutError, asyncio.exceptions.TimeoutError)
+TimeoutErrors = (TimeoutError, asyncio.exceptions.TimeoutError)
+DisconnectErrors = (ConnectionResetError, BrokenPipeError, IndexError, *TimeoutErrors)
 G = Globals()
 G.uniqueClients = 0
 G.servers = {}
@@ -50,7 +50,7 @@ try:
             log("Explicitly erasing cached messages")
             G.msgs = []
         elif arg in ["-?", "-h", "--help"]:
-            filename = filename if filename.startswith("./") else "python3 "+filename
+            filename = filename if filename.startswith("./") else "python3 " + filename
             print(
                 f"""{filename} <args>
 All arguments are optional!
@@ -130,7 +130,7 @@ async def handleClient(reader, writer):
             await asyncio.wait_for(
                 reader.read(), 0.01
             )  # Silently consume the excess username data
-        except TimeoutError:
+        except TimeoutErrors:
             pass
         if not name:
             writer.write(b"Nice try. Actually set a nick.\n")
@@ -205,7 +205,7 @@ Please note that this is not network level statistics.\n""".encode(
                         G.S2SLogs.append(("M", (name, request), G.remoteID))
                     if response:
                         G.msgs.append(response)
-                except TimeoutError:
+                except TimeoutErrors:
                     pass
                 if msgIndex < len(G.msgs):
                     writer.writelines(G.msgs[msgIndex:])
@@ -345,7 +345,7 @@ Please note that this is not network level statistics.\n""".encode(
                                 "WARN",
                             )
                     await writer.drain()
-                except TimeoutError:
+                except TimeoutErrors:
                     pass
                 if any(G.servers[sName].values()):
                     for name in G.servers[sName]:
@@ -381,11 +381,7 @@ Please note that this is not network level statistics.\n""".encode(
                 del G.clientsConnected[cName.lower()]
             del G.servers[sName]
             G.msgs.append(log(f"{sName} has de-linked from the network"))
-    except (
-        ConnectionResetError,
-        BrokenPipeError,
-        IndexError,
-    ):  # Don't ask. IndexError needs to be caught here too.
+    except DisconnectErrors:
         if not name.startswith("S2S-"):
             G.uniqueClients -= 1
             G.msgs.append(log(f"{name} has disconnected from the server."))
@@ -424,7 +420,7 @@ async def connectServer(hostname: str, port: int):
     rID = raw((await reader.read(16)).decode("utf8"))
     try:
         await asyncio.wait_for(reader.read(1024), 0.1)
-    except TimeoutError:
+    except TimeoutErrors:
         pass
     if G.servers.get(rID, False) != False:
         writer.close()
@@ -521,7 +517,7 @@ async def connectServer(hostname: str, port: int):
                         )
                         log(f"Recieved invalid message ({buffer}) from {sName}", "WARN")
                 await writer.drain()
-            except TimeoutError:
+            except TimeoutErrors:
                 pass
             if any(G.servers[rID].values()):
                 for name in G.servers[rID]:
@@ -557,7 +553,7 @@ async def connectServer(hostname: str, port: int):
             del G.clientsConnected[cName.lower()]
         del G.servers[rID]
         G.msgs.append(log(f"{rID} has de-linked from the network"))
-    except (ConnectionResetError, BrokenPipeError, IndexError):
+    except DisconnectErrors:
         if G.cwlgd:
             raise LinksDownException
         for cName in G.servers[rID]:
