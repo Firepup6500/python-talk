@@ -2,15 +2,15 @@
 Description=firepup's python-talk
 
 [Service]
-DynamicUser=yes
-WorkingDirectory=/opt/python-talk
+WorkingDirectory=%h/python-talk
 ExecStart=/usr/bin/python3 server.py --link=37.27.51.34:65048 --no-logs --no-cache --cwlgd
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
 RestrictSUIDSGID=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome=tmpfs
+BindReadOnlyPaths=%h/python-talk
 ProtectProc=ptraceable
 ProcSubset=pid
 PrivateTmp=true
@@ -35,4 +35,4 @@ SystemCallFilter=~@privileged @resources
 UMask=0077
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
