@@ -15,7 +15,7 @@ class Globals: ...
 
 
 TimeoutErrors = (TimeoutError, asyncio.exceptions.TimeoutError)
-DisconnectErrors = (ConnectionResetError, BrokenPipeError, IndexError, *TimeoutErrors)
+DisconnectErrors = (ConnectionResetError, BrokenPipeError, IndexError, UnicodeDecodeError, *TimeoutErrors)
 G = Globals()
 G.uniqueClients = 0
 G.servers = {}
