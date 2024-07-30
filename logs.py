@@ -33,9 +33,9 @@ def log(
         )
     else:
         for line in message.split("\n"):
-            log = log + f"\n[{level}]{'['+origin+']' if origin else ''}[{time}] {line}"
+            log = log + f"\r\n[{level}]{'['+origin+']' if origin else ''}[{time}] {line}"
             print(
                 f"[{level}]{'['+origin+']' if origin else ''}[{time}] {line}",
                 file=stream,
             )
-    return (log[5:] + "\n").encode("utf8")
+    return (log[5:] + "\r\n").encode("utf8")

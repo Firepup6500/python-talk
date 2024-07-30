@@ -96,7 +96,7 @@ except Exception:
 
 if not saveLogs:
     G.msgs.append(
-        b"[00-00-0000 00:00:00] Notice: Logging is disabled on this server instance!\n"
+        b"[00-00-0000 00:00:00] Notice: Logging is disabled on this server instance!\r\n"
     )
 if len(G.remoteID) > 16:
     G.remoteID = G.remoteID[:15]
@@ -122,7 +122,7 @@ async def handleClient(reader, writer):
     try:
         name = ""
         global G
-        writer.write(b"Please identify yourself. Nick limit is 20 chars.\n")
+        writer.write(b"Please identify yourself. Nick limit is 20 chars.\r\n")
         await writer.drain()
         name = raw((await reader.read(20)).decode("utf8"))
         if len(name) > 20:
@@ -136,13 +136,13 @@ async def handleClient(reader, writer):
         except TimeoutErrors:
             pass
         if not name:
-            writer.write(b"Nice try. Actually set a nick.\n")
+            writer.write(b"Nice try. Actually set a nick.\r\n")
             await writer.drain()
             writer.close()
             await writer.wait_closed()
             return
         if name.lower() in G.clientsConnected:
-            writer.write(f"Nick ({name}) in use\n".encode("utf8"))
+            writer.write(f"Nick ({name}) in use\r\n".encode("utf8"))
             await writer.drain()
             writer.close()
             await writer.wait_closed()
@@ -166,25 +166,25 @@ async def handleClient(reader, writer):
                         G.S2SLogs.append(("A", (name, request[4:]), G.remoteID))
                     elif request.startswith("/h"):
                         writer.write(
-                            b"""Command List:
-/me <action>  - Sends a special message so it looks like you did <action>
-/mes <action> - Same as /me, but adds a 's onto your nick
-/afk [reason] - Optional reason, short hand for `/me is afk [to [reason]]`
-/h, /help     - Triggers this command listing
-/back         - Shorthand for `/me is back`
-/stats        - Sends you some server stats
-/quit         - Disconnects you from the server\n"""
+                            b"""Command List:\r
+/me <action>  - Sends a special message so it looks like you did <action>\r
+/mes <action> - Same as /me, but adds a 's onto your nick\r
+/afk [reason] - Optional reason, short hand for `/me is afk [to [reason]]`\r
+/h, /help     - Triggers this command listing\r
+/back         - Shorthand for `/me is back`\r
+/stats        - Sends you some server stats\r
+/quit         - Disconnects you from the server\r\n"""
                         )
                         await writer.drain()
                     elif request.startswith("/stats"):
                         writer.write(
-                            f"""Server stats:
-Linked servers:    {len(G.servers)}
-Connected clients: {G.uniqueClients}
-Total Clients:     {len(G.clientsConnected)}
-Messages sent:     {len(G.msgs)}
-
-Please note that this is not network level statistics.\n""".encode(
+                            f"""Server stats:\r
+Linked servers:    {len(G.servers)}\r
+Connected clients: {G.uniqueClients}\r
+Total Clients:     {len(G.clientsConnected)}\r
+Messages sent:     {len(G.msgs)}\r
+\r
+Please note that this is not network level statistics.\r\n""".encode(
                                 "utf8"
                             )
                         )
@@ -215,7 +215,7 @@ Please note that this is not network level statistics.\n""".encode(
                     await writer.drain()
                     msgIndex = len(G.msgs)
                 if name.lower() in G.killList and G.killList[name.lower()]:
-                    writer.write(b"Your client has been killed by the server\n")
+                    writer.write(b"Your client has been killed by the server\r\n")
                     G.killList[name.lower()] = False
                     break
             await writer.drain()
@@ -240,7 +240,7 @@ Please note that this is not network level statistics.\n""".encode(
             G.msgs.append(log(f"{sName} has linked to the network"))
             G.servers[sName] = {}
             msgIndex = 0
-            writer.write(b"I am awaiting your client listing.\n")
+            writer.write(b"I am awaiting your client listing.\r\n")
             while 1:
                 client = raw((await reader.read(1024)).decode("utf8"))
                 if client == f"END OF CLIENT LISTING FROM {sName}":
@@ -249,19 +249,19 @@ Please note that this is not network level statistics.\n""".encode(
                     client.lower() in G.servers[sName]
                     or client.lower() in G.clientsConnected
                 ):
-                    writer.write(b"K Client rejected: Already exists\n")
+                    writer.write(b"K Client rejected: Already exists\r\n")
                     await writer.drain()
                     continue
-                writer.write(b"I added that client.\n")
+                writer.write(b"I added that client.\r\n")
                 await writer.drain()
                 G.msgs.append(log(f"{client} has connected from {sName}"))
                 G.servers[sName][client.lower()] = False
                 G.S2SLogs.append(("+", client, sName))
-            writer.write(f"{G.remoteID}\n".encode("utf8"))
+            writer.write(f"{G.remoteID}\r\n".encode("utf8"))
             await writer.drain()
             await reader.read(1024)
             for client in G.clientsConnected:
-                writer.write(f"{client}\n".encode("utf8"))
+                writer.write(f"{client}\r\n".encode("utf8"))
                 await writer.drain()
                 resp = raw((await reader.read(1024)).decode("utf8"))
                 if resp.startswith("K"):
@@ -269,7 +269,7 @@ Please note that this is not network level statistics.\n""".encode(
                         G.killList[client] = True
                     else:
                         G.servers[G.clientsConnected[client]][client] = True
-            writer.write(f"END OF CLIENT LISTING FROM {G.remoteID}\n".encode("utf8"))
+            writer.write(f"END OF CLIENT LISTING FROM {G.remoteID}\r\n".encode("utf8"))
             await writer.drain()
             for client in G.servers[sName]:
                 G.clientsConnected[client] = sName
@@ -281,7 +281,7 @@ Please note that this is not network level statistics.\n""".encode(
                     match buffer[0]:
                         case "S":  # Server notice
                             G.msgs.extend([log(buffer[2:])])
-                            writer.write(b"I Mmm... Blueberries\n")
+                            writer.write(b"I Mmm... Blueberries\r\n")
                         case "I":
                             pass
                         case "+":
@@ -293,9 +293,9 @@ Please note that this is not network level statistics.\n""".encode(
                                 G.servers[sName][cName.lower()] = False
                                 G.clientsConnected[cName.lower()] = sName
                                 G.S2SLogs.append(("+", cName, sName))
-                                writer.write(b"I Mmm... Pineapples\n")
+                                writer.write(b"I Mmm... Pineapples\r\n")
                             else:
-                                writer.write(f"K {cName}\n".encode("utf8"))
+                                writer.write(f"K {cName}\r\n".encode("utf8"))
                         case "-":
                             cName = buffer[2:]
                             if G.clientsConnected.get(cName.lower(), None) == sName:
@@ -305,10 +305,10 @@ Please note that this is not network level statistics.\n""".encode(
                                 del G.servers[sName][cName.lower()]
                                 del G.clientsConnected[cName.lower()]
                                 G.S2SLogs.append(("-", cName, sName))
-                                writer.write(b"I Mmm... Bananas\n")
+                                writer.write(b"I Mmm... Bananas\r\n")
                             else:
                                 writer.write(
-                                    f"S Your server is LYING about who is connected to it. - {G.remoteID}, a fellow server\n".encode(
+                                    f"S Your server is LYING about who is connected to it. - {G.remoteID}, a fellow server\r\n".encode(
                                         "utf8"
                                     )
                                 )
@@ -318,14 +318,14 @@ Please note that this is not network level statistics.\n""".encode(
                             G.msgs.append(log(f"  {cName}: {message}"))
                             G.S2SLogs.append(("M", (cName, message), sName))
                             writer.write(
-                                b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace.\n"
+                                b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace.\r\n"
                             )
                         case "A":
                             cName = buffer[2:].split("|", 1)[0]
                             message = buffer[2:].split("|", 1)[1]
                             G.msgs.append(log(f"* {cName} {message}"))
                             G.S2SLogs.append(("A", (cName, message), sName))
-                            writer.write(b"I Mmm... Strawberries\n")
+                            writer.write(b"I Mmm... Strawberries\r\n")
                         case "Q":
                             break
                         case "K":
@@ -338,10 +338,10 @@ Please note that this is not network level statistics.\n""".encode(
                                 G.servers[G.clientsConnected[cName.lower()]][
                                     cName.lower()
                                 ] = True
-                            writer.write(b"I Mmm... Blood\n")
+                            writer.write(b"I Mmm... Blood\r\n")
                         case _:
                             writer.write(
-                                f"S Your server is doing drugs over here, sending me bullshit messages man - {G.remoteID}, A fellow server\n".encode(
+                                f"S Your server is doing drugs over here, sending me bullshit messages man - {G.remoteID}, A fellow server\r\n".encode(
                                     "utf8"
                                 )
                             )
@@ -355,7 +355,7 @@ Please note that this is not network level statistics.\n""".encode(
                 if any(G.servers[sName].values()):
                     for name in G.servers[sName]:
                         if G.servers[sName][name]:
-                            writer.write(f"K {name}\n".encode("utf8"))
+                            writer.write(f"K {name}\r\n".encode("utf8"))
                             await writer.drain()
                             G.servers[sName][name] = False
                 while msgInd < len(G.S2SLogs):
@@ -365,14 +365,14 @@ Please note that this is not network level statistics.\n""".encode(
                         match type:
                             case "A":
                                 nick, msg = data
-                                writer.write(f"A {nick}|{msg}\n".encode("utf8"))
+                                writer.write(f"A {nick}|{msg}\r\n".encode("utf8"))
                             case "M":
                                 nick, msg = data
-                                writer.write(f"M {nick}|{msg}\n".encode("utf8"))
+                                writer.write(f"M {nick}|{msg}\r\n".encode("utf8"))
                             case "+":
-                                writer.write(f"+ {data}\n".encode("utf8"))
+                                writer.write(f"+ {data}\r\n".encode("utf8"))
                             case "-":
-                                writer.write(f"- {data}\n".encode("utf8"))
+                                writer.write(f"- {data}\r\n".encode("utf8"))
                             case _:
                                 pass
                     await writer.drain()
@@ -411,11 +411,11 @@ async def connectServer(hostname: str, port: int):
     try:
         reader, writer = await asyncio.open_connection(hostname, port)
         await reader.read(1024)
-        writer.write(f"S2S-{G.remoteID}\n".encode("utf8"))
+        writer.write(f"S2S-{G.remoteID}\r\n".encode("utf8"))
         await writer.drain()
         await reader.read(1024)
         for client in G.clientsConnected:
-            writer.write(f"{client}\n".encode("utf8"))
+            writer.write(f"{client}\r\n".encode("utf8"))
             await writer.drain()
             resp = raw((await reader.read(1024)).decode("utf8"))
             if resp.startswith("K"):
@@ -423,7 +423,7 @@ async def connectServer(hostname: str, port: int):
                     G.killList[client] = True
                 else:
                     G.servers[G.clientsConnected[client]][client] = True
-        writer.write(f"END OF CLIENT LISTING FROM {G.remoteID}\n".encode("utf8"))
+        writer.write(f"END OF CLIENT LISTING FROM {G.remoteID}\r\n".encode("utf8"))
         await writer.drain()
         rID = raw((await reader.read(16)).decode("utf8"))
         try:
@@ -440,7 +440,7 @@ async def connectServer(hostname: str, port: int):
             return
         G.msgs.append(log(f"{rID} has linked to the network"))
         G.servers[rID] = {}
-        writer.write(b"I recieved your remote ID, now awaiting client listing\n")
+        writer.write(b"I recieved your remote ID, now awaiting client listing\r\n")
         await writer.drain()
         # recieve client list from the other server
         while 1:
@@ -448,10 +448,10 @@ async def connectServer(hostname: str, port: int):
             if client == f"END OF CLIENT LISTING FROM {rID}":
                 break
             if client.lower() in G.servers[rID] or client.lower() in G.clientsConnected:
-                writer.write(b"K Client rejected: Already exists\n")
+                writer.write(b"K Client rejected: Already exists\r\n")
                 await writer.drain()
                 continue
-            writer.write(b"I added that client.\n")
+            writer.write(b"I added that client.\r\n")
             await writer.drain()
             G.msgs.append(log(f"{client} has connected from {rID}"))
             G.servers[rID][client.lower()] = False
@@ -466,7 +466,7 @@ async def connectServer(hostname: str, port: int):
                     match buffer[0]:
                         case "S":
                             G.msgs.extend([log(buffer[2:])])
-                            writer.write(b"I Mmm... Blueberries\n")
+                            writer.write(b"I Mmm... Blueberries\r\n")
                         case "I":
                             pass
                         case "+":
@@ -476,9 +476,9 @@ async def connectServer(hostname: str, port: int):
                                 G.S2SLogs.append(("+", cName, rID))
                                 G.servers[rID][cName.lower()] = False
                                 G.clientsConnected[cName.lower()] = rID
-                                writer.write(b"I Mmm... Pineapples\n")
+                                writer.write(b"I Mmm... Pineapples\r\n")
                             else:
-                                writer.write(f"K {cName}\n".encode("utf8"))
+                                writer.write(f"K {cName}\r\n".encode("utf8"))
                         case "-":
                             cName = buffer[2:]
                             if G.clientsConnected.get(cName.lower(), None) == rID:
@@ -490,7 +490,7 @@ async def connectServer(hostname: str, port: int):
                                 G.S2SLogs.append(("-", cName, rID))
                             else:
                                 writer.write(
-                                    f"S Your server is LYING about who is connected to it. - {G.remoteID}, a fellow server\n".encode(
+                                    f"S Your server is LYING about who is connected to it. - {G.remoteID}, a fellow server\r\n".encode(
                                         "utf8"
                                     )
                                 )
@@ -500,14 +500,14 @@ async def connectServer(hostname: str, port: int):
                             G.msgs.append(log(f"  {cName}: {message}"))
                             G.S2SLogs.append(("M", (cName, message), rID))
                             writer.write(
-                                b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace.\n"
+                                b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace.\r\n"
                             )
                         case "A":
                             cName = buffer[2:].split("|", 1)[0]
                             message = buffer[2:].split("|", 1)[1]
                             G.S2SLogs.append(("A", (cName, message), rID))
                             G.msgs.append(log(f"* {cName} {message}"))
-                            writer.write(b"I Mmm... Strawberries\n")
+                            writer.write(b"I Mmm... Strawberries\r\n")
                         case "Q":
                             break
                         case "K":
@@ -520,10 +520,10 @@ async def connectServer(hostname: str, port: int):
                                 G.servers[G.clientsConnected[cName.lower()]][
                                     cName.lower()
                                 ] = True
-                            writer.write(b"I Mmm... Blood\n")
+                            writer.write(b"I Mmm... Blood\r\n")
                         case _:
                             writer.write(
-                                f"S Your server is doing drugs over here, sending me bullshit messages man - {G.remoteID}, A fellow server\n".encode(
+                                f"S Your server is doing drugs over here, sending me bullshit messages man - {G.remoteID}, A fellow server\r\n".encode(
                                     "utf8"
                                 )
                             )
@@ -537,7 +537,7 @@ async def connectServer(hostname: str, port: int):
                 if any(G.servers[rID].values()):
                     for name in G.servers[rID]:
                         if G.servers[rID][name]:
-                            writer.write(f"K {name}\n".encode("utf8"))
+                            writer.write(f"K {name}\r\n".encode("utf8"))
                             await writer.drain()
                             G.servers[rID][name] = False
                 while msgInd < len(G.S2SLogs):
@@ -546,14 +546,14 @@ async def connectServer(hostname: str, port: int):
                         match type:
                             case "A":
                                 nick, msg = data
-                                writer.write(f"A {nick}|{msg}\n".encode("utf8"))
+                                writer.write(f"A {nick}|{msg}\r\n".encode("utf8"))
                             case "M":
                                 nick, msg = data
-                                writer.write(f"M {nick}|{msg}\n".encode("utf8"))
+                                writer.write(f"M {nick}|{msg}\r\n".encode("utf8"))
                             case "+":
-                                writer.write(f"+ {data}\n".encode("utf8"))
+                                writer.write(f"+ {data}\r\n".encode("utf8"))
                             case "-":
-                                writer.write(f"- {data}\n".encode("utf8"))
+                                writer.write(f"- {data}\r\n".encode("utf8"))
                             case _:
                                 pass
                     await writer.drain()
@@ -607,7 +607,7 @@ async def runServer(address: str, port: int):
         G.msgs.append(log("Server crash", "FATAL")[1:])
         log("Shutting down from Exception", "FATAL")
         Err = format_exc()
-        for line in Err.split("\n"):
+        for line in Err.split("\r\n"):
             log(line, "ERROR")
     finally:
         if not crash:
@@ -617,7 +617,7 @@ async def runServer(address: str, port: int):
         # server.abort_clients()
         if saveLogs:
             with open("cache.py", "w") as cache:
-                cache.write(f"msgs = {G.msgs}\n")
+                cache.write(f"msgs = {G.msgs}\r\n")
             log("Saved logs, exiting now.")
         else:
             log("Not saving logs, exiting now.")
