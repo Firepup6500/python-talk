@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import os, sys, asyncio, re, signal
+import os, sys, asyncio, re, signal, socket
 from platform import uname
 from traceback import format_exc
 from logs import log
@@ -37,7 +37,7 @@ G.outboundLinks = []
 G.S2SLogs = []
 G.cwlgd = False
 saveLogs = True
-address = "0.0.0.0"
+address = "::"
 # Try to load a message log, if one exists
 try:
     G.msgs = __import__("cache").msgs
@@ -239,7 +239,7 @@ Please note that this is not network level statistics.\r\n""".encode(
                 writer.close()
                 await writer.wait_closed()
                 return  # Server is already "linked", drop the connection
-            if G.remoteID == sName:  # Hey! you can't *also* be ***me***!
+            if G.remoteID == sName or not sName:  # Hey! you can't *also* be ***me***!
                 writer.close()
                 await writer.wait_closed()
                 return  # drop "us"
@@ -444,7 +444,7 @@ async def connectServer(hostname: str, port: int):
             writer.close()
             await writer.wait_closed()
             return
-        if G.remoteID == rID:
+        if G.remoteID == rID or not rID:
             writer.close()
             await writer.wait_closed()
             return
@@ -602,7 +602,13 @@ async def connectServer(hostname: str, port: int):
 
 async def runServer(address: str, port: int):
     global G
-    server = await asyncio.start_server(handleClient, address, port)
+    if ":" in address:
+        INET = socket.AF_INET6
+    else:
+        INET = socket.AF_INET
+    sock = socket.socket(INET, socket.SOCK_STREAM)
+    sock.bind((address, port))
+    server = await asyncio.start_server(handleClient, sock=sock)
     log(f"Listening on port {port}...")
     G.msgs.append(log("Server startup"))
     links = []
