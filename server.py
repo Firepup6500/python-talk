@@ -36,6 +36,7 @@ G.killList = {}
 G.outboundLinks = []
 G.S2SLogs = []
 G.cwlgd = False
+G.NUL = "\x00"
 saveLogs = True
 address = "::"
 # Try to load a message log, if one exists
@@ -319,16 +320,16 @@ Please note that this is not network level statistics.\r\n""".encode(
                                     )
                                 )
                         case "M":
-                            cName = buffer[2:].split("|", 1)[0]
-                            message = buffer[2:].split("|", 1)[1]
+                            cName = buffer[2:].split(G.NUL, 1)[0]
+                            message = buffer[2:].split(G.NUL, 1)[1]
                             G.msgs.append(log(f"  {cName}: {message}"))
                             G.S2SLogs.append(("M", (cName, message), sName))
                             writer.write(
                                 b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace.\r\n"
                             )
                         case "A":
-                            cName = buffer[2:].split("|", 1)[0]
-                            message = buffer[2:].split("|", 1)[1]
+                            cName = buffer[2:].split(G.NUL, 1)[0]
+                            message = buffer[2:].split(G.NUL, 1)[1]
                             G.msgs.append(log(f"* {cName} {message}"))
                             G.S2SLogs.append(("A", (cName, message), sName))
                             writer.write(b"I Mmm... Strawberries\r\n")
@@ -371,10 +372,10 @@ Please note that this is not network level statistics.\r\n""".encode(
                         match type:
                             case "A":
                                 nick, msg = data
-                                writer.write(f"A {nick}|{msg}\r\n".encode("utf8"))
+                                writer.write(f"A {nick}{G.NUL}{msg}\r\n".encode("utf8"))
                             case "M":
                                 nick, msg = data
-                                writer.write(f"M {nick}|{msg}\r\n".encode("utf8"))
+                                writer.write(f"M {nick}{G.NUL}{msg}\r\n".encode("utf8"))
                             case "+":
                                 writer.write(f"+ {data}\r\n".encode("utf8"))
                             case "-":
@@ -505,16 +506,16 @@ async def connectServer(hostname: str, port: int):
                                     )
                                 )
                         case "M":
-                            cName = buffer[2:].split("|", 1)[0]
-                            message = buffer[2:].split("|", 1)[1]
+                            cName = buffer[2:].split(G.NUL, 1)[0]
+                            message = buffer[2:].split(G.NUL, 1)[1]
                             G.msgs.append(log(f"  {cName}: {message}"))
                             G.S2SLogs.append(("M", (cName, message), rID))
                             writer.write(
                                 b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace.\r\n"
                             )
                         case "A":
-                            cName = buffer[2:].split("|", 1)[0]
-                            message = buffer[2:].split("|", 1)[1]
+                            cName = buffer[2:].split(G.NUL, 1)[0]
+                            message = buffer[2:].split(G.NUL, 1)[1]
                             G.S2SLogs.append(("A", (cName, message), rID))
                             G.msgs.append(log(f"* {cName} {message}"))
                             writer.write(b"I Mmm... Strawberries\r\n")
@@ -556,10 +557,10 @@ async def connectServer(hostname: str, port: int):
                         match type:
                             case "A":
                                 nick, msg = data
-                                writer.write(f"A {nick}|{msg}\r\n".encode("utf8"))
+                                writer.write(f"A {nick}{G.NUL}{msg}\r\n".encode("utf8"))
                             case "M":
                                 nick, msg = data
-                                writer.write(f"M {nick}|{msg}\r\n".encode("utf8"))
+                                writer.write(f"M {nick}{G.NUL}{msg}\r\n".encode("utf8"))
                             case "+":
                                 writer.write(f"+ {data}\r\n".encode("utf8"))
                             case "-":
