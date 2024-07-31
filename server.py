@@ -93,7 +93,7 @@ Examples:
             address = arg[9:]
         elif arg.startswith("--cwlgd"):
             G.cwlgd = True
-            log("Server will crasg when outbound links go down!", "WARN")
+            log("Server will crash when outbound links go down!", "WARN")
         else:
             log(f"Unrecognized argument {arg}!", "WARN")
 except Exception:
