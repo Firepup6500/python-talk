@@ -471,7 +471,7 @@ async def connectServer(hostname: str, port: int):
         try:
             while 1:
                 try:
-                    rawMsg = await asyncio.wait_for(reader.read(967), 0.1)
+                    rawMsg = await asyncio.wait_for(reader.read(1024), 0.1)
                     buffer = raw(rawMsg.decode("utf8"))
                     match buffer[0]:
                         case "S":
@@ -538,7 +538,7 @@ async def connectServer(hostname: str, port: int):
                                 )
                             )
                             log(
-                                f"Recieved invalid message ({buffer}) from {sName}",
+                                f"Recieved invalid message ({buffer}) from {rID}",
                                 "WARN",
                             )
                     await writer.drain()
