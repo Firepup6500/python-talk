@@ -15,7 +15,13 @@ class Globals: ...
 
 
 TimeoutErrors = (TimeoutError, asyncio.exceptions.TimeoutError)
-DisconnectErrors = (ConnectionResetError, BrokenPipeError, IndexError, UnicodeDecodeError, *TimeoutErrors)
+DisconnectErrors = (
+    ConnectionResetError,
+    BrokenPipeError,
+    IndexError,
+    UnicodeDecodeError,
+    *TimeoutErrors,
+)
 G = Globals()
 G.uniqueClients = 0
 G.servers = {}
@@ -592,6 +598,7 @@ async def connectServer(hostname: str, port: int):
         for line in Err.split("\r\n"):
             log(line, "ERROR")
         raise FailedLinkError
+
 
 async def runServer(address: str, port: int):
     global G
