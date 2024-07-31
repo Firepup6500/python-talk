@@ -36,7 +36,7 @@ G.killList = {}
 G.outboundLinks = []
 G.S2SLogs = []
 G.cwlgd = False
-G.NUL = "\x00"
+G.NUL = "|"
 saveLogs = True
 address = "::"
 # Try to load a message log, if one exists
@@ -91,7 +91,7 @@ Examples:
             if not G.remoteID or len(G.remoteID) > 16:
                 raise ValueError
         elif arg.startswith("--address"):
-            address = arg[9:]
+            address = arg[10:]
         elif arg.startswith("--cwlgd"):
             G.cwlgd = True
             log("Server will crash when outbound links go down!", "WARN")
@@ -608,6 +608,7 @@ async def runServer(address: str, port: int):
     else:
         INET = socket.AF_INET
     sock = socket.socket(INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Reuse socket
     sock.bind((address, port))
     server = await asyncio.start_server(handleClient, sock=sock)
     log(f"Listening on port {port}...")
@@ -643,6 +644,7 @@ async def runServer(address: str, port: int):
             log("Saved logs, exiting now.")
         else:
             log("Not saving logs, exiting now.")
+        sock.close()
 
 
 class ServerInterruptException(KeyboardInterrupt): ...
