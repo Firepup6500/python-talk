@@ -603,13 +603,21 @@ async def connectServer(hostname: str, port: int):
 
 async def runServer(address: str, port: int):
     global G
-    if ":" in address:
-        INET = socket.AF_INET6
-    else:
-        INET = socket.AF_INET
-    sock = socket.socket(INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Reuse socket
-    sock.bind((address, port))
+    sock = None
+    try:
+        if ":" in address:
+            INET = socket.AF_INET6
+        else:
+            INET = socket.AF_INET
+        sock = socket.socket(INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Reuse socket
+        sock.bind((address, port))
+    except OSError as E:
+        if E.errno != 97 or hostname != '::1':
+            raise E
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Reuse socket
+        sock.bind(('0.0.0.0', port))
     server = await asyncio.start_server(handleClient, sock=sock)
     log(f"Listening on port {port}...")
     G.msgs.append(log("Server startup"))
