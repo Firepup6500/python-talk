@@ -613,7 +613,7 @@ async def runServer(address: str, port: int):
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Reuse socket
         sock.bind((address, port))
     except OSError as E:
-        if E.errno != 97 or hostname != '::1':
+        if E.errno != 97 or address != '::1':
             raise E
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Reuse socket
