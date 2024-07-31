@@ -404,6 +404,10 @@ Please note that this is not network level statistics.\r\n""".encode(
                     pass
             del G.servers[name[4:]]
             G.msgs.append(log(f"{name[4:]} has de-linked from the network"))
+    except Exception:
+        Err = format_exc()
+        for line in Err.split("\r\n"):
+            log(line, "ERROR")
 
 
 async def connectServer(hostname: str, port: int):
@@ -583,7 +587,11 @@ async def connectServer(hostname: str, port: int):
         log("OSError: " + str(E), "ERROR")
         if G.cwlgd:
             raise FailedLinkError
-
+    except Exception:
+        Err = format_exc()
+        for line in Err.split("\r\n"):
+            log(line, "ERROR")
+        raise FailedLinkError
 
 async def runServer(address: str, port: int):
     global G
