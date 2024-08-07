@@ -36,7 +36,7 @@ G.killList = {}
 G.outboundLinks = []
 G.S2SLogs = []
 G.cwlgd = False
-G.NUL = "|"
+G.NUL = "\x1e"
 saveLogs = True
 address = "::"
 # Try to load a message log, if one exists
@@ -284,7 +284,7 @@ Please note that this is not network level statistics.\r\n""".encode(
             while 1:
                 try:
                     rawMsg = await asyncio.wait_for(reader.read(967), 0.1)
-                    buffer = raw(rawMsg.decode("utf8"))
+                    buffer = rawMsg.decode("utf8")
                     match buffer[0]:
                         case "S":  # Server notice
                             G.msgs.extend([log(buffer[2:])])
@@ -473,7 +473,7 @@ async def connectServer(hostname: str, port: int):
             while 1:
                 try:
                     rawMsg = await asyncio.wait_for(reader.read(1024), 0.1)
-                    buffer = raw(rawMsg.decode("utf8"))
+                    buffer = rawMsg.decode("utf8")
                     match buffer[0]:
                         case "S":
                             G.msgs.extend([log(buffer[2:])])
