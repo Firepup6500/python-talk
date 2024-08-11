@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import os, sys, asyncio, re, signal, socket
+import os, sys, asyncio, re, signal, socket, random
 from platform import uname
 from traceback import format_exc
 from logs import log
@@ -74,6 +74,7 @@ Accepted arguments:
 --hostname=<string>         - Sets the hostname for this server to use when talking to other servers. Defaults to the current system's hostname (limit of 16 chars)
 --address=<IP>              - Sets the IP to listen on, defaults to all addresses (0.0.0.0)
 --cwlgd                     - Crashes the server when outbound links go down
+-r, --random-port           - Randomizes the port to listen on
 
 Examples:
 {filename} --hostname=Fun-chat --link=chat.example.com:65048 --port=92628
@@ -84,17 +85,21 @@ Examples:
         elif arg in ["-l", "--no-logs"]:
             log("Explicitly disabling saving of logs!")
             saveLogs = False
-        elif arg.startswith("--link"):
+        elif arg.startswith("--link="):
             G.outboundLinks.append((arg[7:].split(":")[0], int(arg.split(":")[1])))
-        elif arg.startswith("--hostname"):
+        elif arg.startswith("--hostname="):
             G.remoteID = arg[11:]
             if not G.remoteID or len(G.remoteID) > 16:
                 raise ValueError
-        elif arg.startswith("--address"):
+        elif arg.startswith("--address="):
             address = arg[10:]
-        elif arg.startswith("--cwlgd"):
+        elif arg in ["--cwlgd"]:
             G.cwlgd = True
             log("Server will crash when outbound links go down!", "WARN")
+        elif arg in ["-r", "--random-port"]
+            random.seed()
+            port = random.randint(10000, 60000)
+            log(f"Randomized port selected: {port}", "INFO")
         else:
             log(f"Unrecognized argument {arg}!", "WARN")
 except Exception:
@@ -179,11 +184,11 @@ async def handleClient(reader, writer):
 /afk [reason] - Optional reason, short hand for `/me is afk [to [reason]]`\r
 /h, /help     - Triggers this command listing\r
 /back         - Shorthand for `/me is back`\r
-/stats        - Sends you some server stats\r
+/stat         - Sends you some server stats\r
 /quit         - Disconnects you from the server\r\n"""
                         )
                         await writer.drain()
-                    elif request.startswith("/stats"):
+                    elif request.startswith("/stat"):
                         writer.write(
                             f"""Server stats:\r
 Linked servers:    {len(G.servers)}\r
