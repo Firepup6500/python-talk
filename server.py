@@ -96,7 +96,7 @@ Examples:
         elif arg in ["--cwlgd"]:
             G.cwlgd = True
             log("Server will crash when outbound links go down!", "WARN")
-        elif arg in ["-r", "--random-port"]
+        elif arg in ["-r", "--random-port"]:
             random.seed()
             port = random.randint(10000, 60000)
             log(f"Randomized port selected: {port}", "INFO")
