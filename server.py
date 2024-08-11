@@ -99,7 +99,6 @@ Examples:
         elif arg in ["-r", "--random-port"]:
             random.seed()
             port = random.randint(10000, 60000)
-            log(f"Randomized port selected: {port}", "INFO")
         else:
             log(f"Unrecognized argument {arg}!", "WARN")
 except Exception:
