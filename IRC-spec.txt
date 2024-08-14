@@ -1,0 +1,35 @@
+# On-connect
+:<servername> CAP * LS :
+:<servername> 001 <client> :Welcome to the python-talk Network, <client>
+:<servername> 002 <client> :Your host is <servername>, running version 0.1
+:<servername> 003 <client> :This server was created 0
+:<servername> 004 <client> python-talk 0.1 r t
+:<servername> 005 <client> AWAYLEN=200,CASEMAPPING=ascii,CHANTYPES=#,ELIST=U,HOSTLEN=16 :are supported by this server
+:<servername> 005 <client> CHANLIMIT=#:1,CHANMODES=b,k,l,t,CHANNELLEN=4,KICKLEN=1,MAXLIST=b:1 :are supported by this server
+:<servername> 005 <client> MODES=4,NETWORK=talknet,NICKLEN=20,TOPICLEN=30,USERLEN=1 :are supported by this server
+:<servername> 251 <client> :There are <u> users and 0 invisible on <s> servers
+:<servername> 252 <client> 0 :operator(s) online
+:<servername> 253 <client> 0 :unknown connection(s)
+:<servername> 254 <client> 1 :channel formed
+:<servername> 255 <client> :I have <c> clients and <s> servers
+:<servername> 265 <client> [<u> <m>] :Current local users <u>, max <m>
+:<servername> 266 <client> [<u> <m>] :Current global users <u>, max <m>
+:<servername> 422 <client> :This server does not support MOTDs
+:<client> JOIN #main
+:<servername> 324 <client> #main t
+:<servername> 332 <client> #main :Welcome to the main channel!
+:<servername> 353 <client> = #main :<client>, ...other clients here...
+:<servername> 366 <client> #main :End of /NAMES list
+# On Attempting to join/part a channel, or anything else I don't want to deal with
+:<servername> 421 <client> <command> :Unknown command
+# I should probably return the "NOSUCHCHANNEL" thing for joins
+
+#PING PONG
+:<servername> PONG <servername> :<data>
+
+# If the user tries to kill us or another server, respond with an easter egg
+:<servername> 483 <client> :You can't kill me, I'm Skynet!
+# Otherwise, if the user exists:
+:<servername> 481 <client> :Permission Denied- There are no IRC operators here.
+# Otherwise:
+:<servername> 401 <client> <nickname> :No such nick/channel
