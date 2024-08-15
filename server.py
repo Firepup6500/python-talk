@@ -37,6 +37,8 @@ G.outboundLinks = []
 G.S2SLogs = []
 G.cwlgd = False
 G.NUL = "\x1e"
+G.IRCStats = {"users": {"localMax": 0, "localCurrent": 0, "globalMax": 0, "globalCurrent": 0}, "servers": 0}
+G.queue = []
 saveLogs = True
 address = "::"
 # Try to load a message log, if one exists
@@ -113,6 +115,31 @@ if len(G.remoteID) > 16:
     G.remoteID = G.remoteID[:15]
 
 
+async def getMessage(reader, localQueue: list, size: int = 0, timeout: float = 0, sanitize: bool = False, _raise: bool = False) -> str:
+    if not localQueue:
+        data = ""
+        if timeout > 0:
+            if _raise:
+                data = await asyncio.wait_for(reader.read(size), timeout)
+            else:
+                try:
+                    data = await asyncio.wait_for(reader.read(size), timeout)
+                except TimeoutErrors:
+                    return ""  # We should never return nothing, except in this one case.
+        else:
+            data = await reader.read(size)
+        localQueue = data.decode("utf8").strip().split("\r\n")
+    tmp = localQueue.pop(0)
+    if sanitize:
+        tmp = raw(tmp)
+    if size:
+        other = tmp[size:]
+        tmp = tmp[:size]
+        if other:
+            localQueue.insert(0, other)
+    return tmp, localQueue
+
+
 def raw(string: str) -> str:
     s = string.strip()
     s = f"{s!r}"[1:-1].replace("\\\\", "\\")
@@ -135,17 +162,12 @@ async def handleClient(reader, writer):
         global G
         writer.write(b"Please identify yourself. Nick limit is 20 chars.\r\n")
         await writer.drain()
-        name = raw((await reader.read(20)).decode("utf8"))
+        name, localQueue = await getMessage(reader, [], 20, 0, True)
+        localQueue = []
         if len(name) > 20:
             name = name[
                 :19
             ]  # Really this is only possible if someone passes raw unicode as a nick, but let's clean it up anyways.
-        try:
-            await asyncio.wait_for(
-                reader.read(), 0.01
-            )  # Silently consume the excess username data
-        except TimeoutErrors:
-            pass
         if not name:
             writer.write(b"Nice try. Actually set a nick.\r\n")
             await writer.drain()
@@ -158,7 +180,9 @@ async def handleClient(reader, writer):
             writer.close()
             await writer.wait_closed()
             return
-        if not name.startswith("S2S-"):
+        if name == "CAP LS 302":
+            pass  # TODO: IRC Logic
+        elif not name.startswith("S2S-"):
             G.clientsConnected[name.lower()] = G.remoteID
             msgIndex = 0
             G.uniqueClients += 1
@@ -166,8 +190,7 @@ async def handleClient(reader, writer):
             G.S2SLogs.append(("+", name, G.remoteID))
             while 1:
                 try:
-                    buffer = await asyncio.wait_for(reader.read(967), 0.1)
-                    request = raw(buffer.decode("utf8"))
+                    request, localQueue = await getMessage(reader, localQueue, 967, 0.1, True, True)
                     response = None
                     if request.startswith("/mes "):
                         response = log(f"* {name}'s {request[5:]}")
@@ -253,7 +276,7 @@ Please note that this is not network level statistics.\r\n""".encode(
             msgIndex = 0
             writer.write(b"I am awaiting your client listing.\r\n")
             while 1:
-                client = raw((await reader.read(1024)).decode("utf8"))
+                client, localQueue = await getMessage(reader, localQueue, 20, 0, True)
                 if client == f"END OF CLIENT LISTING FROM {sName}":
                     break
                 if (
@@ -274,7 +297,7 @@ Please note that this is not network level statistics.\r\n""".encode(
             for client in G.clientsConnected:
                 writer.write(f"{client}\r\n".encode("utf8"))
                 await writer.drain()
-                resp = raw((await reader.read(1024)).decode("utf8"))
+                resp, localQueue = await getMessage(reader, localQueue, 1024, 0, True)
                 if resp.startswith("K"):
                     if G.clientsConnected[client] == G.remoteID:
                         G.killList[client] = True
@@ -287,8 +310,7 @@ Please note that this is not network level statistics.\r\n""".encode(
             msgInd = len(G.S2SLogs)
             while 1:
                 try:
-                    rawMsg = await asyncio.wait_for(reader.read(967), 0.1)
-                    buffer = rawMsg.decode("utf8").strip()
+                    buffer, localQueue = await getMessage(reader, localQueue, 967, 0.1, False, True)
                     match buffer[0]:
                         case "S":  # Server notice
                             G.msgs.extend([log(buffer[2:])])
@@ -425,14 +447,14 @@ async def connectServer(hostname: str, port: int):
     global G
     try:
         reader, writer = await asyncio.open_connection(hostname, port)
-        await reader.read(1024)
+        ext, localQueue = await getMessage(reader, [], 1024)
         writer.write(f"S2S-{G.remoteID}\r\n".encode("utf8"))
         await writer.drain()
-        await reader.read(1024)
+        ext, localQueue = await getMessage(reader, [], 1024)
         for client in G.clientsConnected:
             writer.write(f"{client}\r\n".encode("utf8"))
             await writer.drain()
-            resp = raw((await reader.read(1024)).decode("utf8"))
+            resp, localQueue = await getMessage(reader, [localQueue], 1024)
             if resp.startswith("K"):
                 if G.clientsConnected[client] == G.remoteID:
                     G.killList[client] = True
@@ -459,7 +481,7 @@ async def connectServer(hostname: str, port: int):
         await writer.drain()
         # recieve client list from the other server
         while 1:
-            client = raw((await reader.read(1024)).decode("utf8"))
+            client, localQueue = await getMessage(reader, localQueue, 1024, 0, True)
             if client == f"END OF CLIENT LISTING FROM {rID}":
                 break
             if client.lower() in G.servers[rID] or client.lower() in G.clientsConnected:
@@ -476,8 +498,7 @@ async def connectServer(hostname: str, port: int):
         try:
             while 1:
                 try:
-                    rawMsg = await asyncio.wait_for(reader.read(1024), 0.1)
-                    buffer = rawMsg.decode("utf8").strip()
+                    buffer, localQueue = await getMessage(reader, localQueue, 1024, 0.1, False, True)
                     match buffer[0]:
                         case "S":
                             G.msgs.extend([log(buffer[2:])])
