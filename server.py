@@ -115,24 +115,18 @@ if len(G.remoteID) > 16:
     G.remoteID = G.remoteID[:15]
 
 
-async def getMessage(reader, localQueue: list, size: int = 0, timeout: float = 0, sanitize: bool = False, _raise: bool = False) -> str:
+async def getMessage(reader, localQueue: list, size: int = 0, timeout: float = 0, sanitize: bool = False) -> str:
     if not localQueue:
         data = ""
-        if timeout > 0:
-            if _raise:
-                data = await asyncio.wait_for(reader.read(size), timeout)
-            else:
-                try:
-                    data = await asyncio.wait_for(reader.read(size), timeout)
-                except TimeoutErrors:
-                    return ""  # We should never return nothing, except in this one case.
+        if timeout and timeout > 0:
+            data = await asyncio.wait_for(reader.read(size), timeout)
         else:
             data = await reader.read(size)
         localQueue = data.decode("utf8").strip().split("\r\n")
     tmp = localQueue.pop(0)
     if sanitize:
         tmp = raw(tmp)
-    if size:
+    if size and size > 0:
         other = tmp[size:]
         tmp = tmp[:size]
         if other:
@@ -190,7 +184,7 @@ async def handleClient(reader, writer):
             G.S2SLogs.append(("+", name, G.remoteID))
             while 1:
                 try:
-                    request, localQueue = await getMessage(reader, localQueue, 967, 0.1, True, True)
+                    request, localQueue = await getMessage(reader, localQueue, 967, 0.1, True)
                     response = None
                     if request.startswith("/mes "):
                         response = log(f"* {name}'s {request[5:]}")
@@ -276,7 +270,7 @@ Please note that this is not network level statistics.\r\n""".encode(
             msgIndex = 0
             writer.write(b"I am awaiting your client listing.\r\n")
             while 1:
-                client, localQueue = await getMessage(reader, localQueue, 20, 0, True)
+                client, localQueue = await getMessage(reader, localQueue, 1024, 0, True)
                 if client == f"END OF CLIENT LISTING FROM {sName}":
                     break
                 if (
@@ -310,7 +304,7 @@ Please note that this is not network level statistics.\r\n""".encode(
             msgInd = len(G.S2SLogs)
             while 1:
                 try:
-                    buffer, localQueue = await getMessage(reader, localQueue, 967, 0.1, False, True)
+                    buffer, localQueue = await getMessage(reader, localQueue, 1024, 0.1, False)
                     match buffer[0]:
                         case "S":  # Server notice
                             G.msgs.extend([log(buffer[2:])])
@@ -454,7 +448,7 @@ async def connectServer(hostname: str, port: int):
         for client in G.clientsConnected:
             writer.write(f"{client}\r\n".encode("utf8"))
             await writer.drain()
-            resp, localQueue = await getMessage(reader, [localQueue], 1024)
+            resp, localQueue = await getMessage(reader, localQueue, 1024, 0, True)
             if resp.startswith("K"):
                 if G.clientsConnected[client] == G.remoteID:
                     G.killList[client] = True
@@ -498,7 +492,7 @@ async def connectServer(hostname: str, port: int):
         try:
             while 1:
                 try:
-                    buffer, localQueue = await getMessage(reader, localQueue, 1024, 0.1, False, True)
+                    buffer, localQueue = await getMessage(reader, localQueue, 1024, 0.1, False)
                     match buffer[0]:
                         case "S":
                             G.msgs.extend([log(buffer[2:])])
