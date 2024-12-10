@@ -20,8 +20,10 @@
 :<servername> 332 <client> #main :Welcome to the main channel!
 :<servername> 353 <client> = #main :<client>, ...other clients here...
 :<servername> 366 <client> #main :End of /NAMES list
+
 # On Attempting to join/part a channel, or anything else I don't want to deal with
 :<servername> 421 <client> <command> :Unknown command
+
 # I should probably return the "NOSUCHCHANNEL" thing for joins
 
 #PING PONG

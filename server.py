@@ -3,6 +3,7 @@ import os, sys, asyncio, re, signal, socket, random
 from platform import uname
 from traceback import format_exc
 from logs import log
+from datetime import datetime as dt, timezone as tz
 
 
 class LinkDownError(Exception): ...
@@ -11,7 +12,26 @@ class LinkDownError(Exception): ...
 class FailedLinkError(Exception): ...
 
 
-class Globals: ...
+class Globals:
+    def __init__(G):
+        G.uniqueClients = 0
+        G.servers = {}
+        G.clientsConnected = {}
+        G.msgs = []
+        G.remoteID = uname().node
+        G.event = asyncio.Event()
+        G.loop = asyncio.get_event_loop()
+        G.interruptCount = 0
+        G.killList = {}
+        G.outboundLinks = []
+        G.S2SLogs = []
+        G.cwlgd = False
+        G.NUL = "\x1e"
+        dtime = dt.now(tz.utc)
+        dtime.replace(tzinfo=tz.utc)
+        time = dtime.strftime("%d-%m-%Y at %H:%M:%S UTC")
+        G.IRCStats = {"users": {"localMax": 0, "localCurrent": 0, "globalMax": 0, "globalCurrent": 0}, "servers": 0, "bootTime": time}
+        G.queue = []
 
 
 TimeoutErrors = (TimeoutError, asyncio.exceptions.TimeoutError)
@@ -23,23 +43,8 @@ DisconnectErrors = (
     *TimeoutErrors,
 )
 G = Globals()
-G.uniqueClients = 0
-G.servers = {}
-G.clientsConnected = {}
-port = 65048
-G.msgs = []
-G.remoteID = uname().node
-G.event = asyncio.Event()
-G.loop = asyncio.get_event_loop()
-G.interruptCount = 0
-G.killList = {}
-G.outboundLinks = []
-G.S2SLogs = []
-G.cwlgd = False
-G.NUL = "\x1e"
-G.IRCStats = {"users": {"localMax": 0, "localCurrent": 0, "globalMax": 0, "globalCurrent": 0}, "servers": 0}
-G.queue = []
 saveLogs = True
+port = 65048
 address = "::"
 # Try to load a message log, if one exists
 try:
@@ -115,9 +120,9 @@ if len(G.remoteID) > 16:
     G.remoteID = G.remoteID[:15]
 
 
-async def getMessage(reader, localQueue: list, size: int = 0, timeout: float = 0, sanitize: bool = False) -> str:
+async def getMessage(reader, localQueue: list, size: int = 0, timeout: float = 0, sanitize: bool = False) -> tuple[str, list[str]]:
     if not localQueue:
-        data = ""
+        data = b""
         if timeout and timeout > 0:
             data = await asyncio.wait_for(reader.read(size), timeout)
         else:
@@ -157,7 +162,7 @@ async def handleClient(reader, writer):
         writer.write(b"Please identify yourself. Nick limit is 20 chars.\r\n")
         await writer.drain()
         name, localQueue = await getMessage(reader, [], 20, 0, True)
-        localQueue = []
+        #log(f"{localQueue}", "DEBUG")
         if len(name) > 20:
             name = name[
                 :19
@@ -175,8 +180,101 @@ async def handleClient(reader, writer):
             await writer.wait_closed()
             return
         if name == "CAP LS 302":
-            pass  # TODO: IRC Logic
-        elif not name.startswith("S2S-"):
+            name = "Unknown IRC Client"
+            writer.write(f":{G.remoteID} CAP * LS\r\n".encode("utf8"))
+            await writer.drain()
+            nameFrag = ""
+            if localQueue:
+                nameFrag = localQueue[0]
+            iname, localQueue = await getMessage(reader, [], 50, 0, True)
+            iname = (nameFrag + iname).split(" ", 1)[1].lower()
+            G.uniqueClients += 1
+            G.clientsConnected[iname] = G.remoteID
+            name = iname
+            G.msgs.extend([log(f"{iname} has connected to the server.")])
+            G.S2SLogs.append(("+", iname, G.remoteID))
+            localQueue = [] # Discard "USER" data
+            clientList = iname + ",".join(G.clientsConnected.keys())
+            writer.write(f""":{G.remoteID} 001 {iname} :Welcome to the python-talk Network, {iname}\r
+:{G.remoteID} 002 {iname} :Your host is {G.remoteID}, running version 0.1\r
+:{G.remoteID} 003 {iname} :This server was created on {G.IRCStats["bootTime"]}\r
+:{G.remoteID} 004 {iname} python-talk 0.1 r t\r
+:{G.remoteID} 005 {iname} AWAYLEN=200,CASEMAPPING=ascii,CHANTYPES=#,ELIST=U,HOSTLEN=16 :are supported by this server\r
+:{G.remoteID} 005 {iname} CHANLIMIT=#:1,CHANMODES=b,k,l,t,CHANNELLEN=4,KICKLEN=1,MAXLIST=b:1 :are supported by this server\r
+:{G.remoteID} 005 {iname} MODES=4,NETWORK=talknet,NICKLEN=20,TOPICLEN=30,USERLEN=1 :are supported by this server\r
+:{G.remoteID} 251 {iname} :There are {G.IRCStats["users"]["globalCurrent"]} users and 0 invisible on {G.IRCStats["servers"]} servers\r
+:{G.remoteID} 252 {iname} 0 :operator(s) online\r
+:{G.remoteID} 253 {iname} 0 :unknown connection(s)\r
+:{G.remoteID} 254 {iname} 1 :channel formed\r
+:{G.remoteID} 255 {iname} :I have {G.IRCStats["users"]["globalCurrent"]} clients and {G.IRCStats["servers"]} servers\r
+:{G.remoteID} 265 {iname} [{G.IRCStats["users"]["localCurrent"]} {G.IRCStats["users"]["localMax"]}] :Current local users {G.IRCStats["users"]["localCurrent"]}, max {G.IRCStats["users"]["localMax"]}\r
+:{G.remoteID} 266 {iname} [{G.IRCStats["users"]["globalCurrent"]} {G.IRCStats["users"]["globalMax"]}] :Current global users {G.IRCStats["users"]["globalCurrent"]}, max {G.IRCStats["users"]["globalMax"]}\r
+:{G.remoteID} 422 {iname} :This server does not support MOTDs\r
+:{iname} JOIN #main\r
+:{G.remoteID} 324 {iname} #main t\r
+:{G.remoteID} 332 {iname} #main :Welcome to the main channel!\r
+:{G.remoteID} 353 {iname} = #main :{clientList}\r
+:{G.remoteID} 366 {iname} #main :End of /NAMES list\r\n""".encode("utf8"))
+            await writer.drain()
+            msgIndex = len(G.msgs)
+            while 1:
+                try:
+                    request, localQueue = await getMessage(reader, localQueue, 967, 0.1, False)
+                    request = request.replace(G.NUL, "\\x1e")
+                    response = None
+                    log(request, "DEBUG")
+                    cmd = request.split(" ")[0].lower()
+                    args = request.split(" ")[1:]
+                    if len(args) == 0:
+                        args = ["you-gave-me-an-invalid-command-why-would-you-do-this-to-me"]
+                    match cmd:
+                        case "ping":
+                            writer.write(f":{G.remoteID} PONG {G.remoteID} :{' '.join(args)}\r\n".encode("utf-8"))
+                            await writer.drain()
+                        case "join":
+                            if args[0].lower() == "#main":
+                                writer.write(f":{G.remoteID} 443 {iname} {iname} #main :You're already in #main, and you cannot leave\r\n".encode("utf-8"))
+                            else:
+                                writer.write(f":{G.remoteID} 405 {iname} {args[0]} :Only #main exists.\r\n".encode("utf-8"))
+                            await writer.drain()
+                        case "privmsg":
+                            if args[0].lower() == "#main":
+                                msg = " ".join(args[1:])
+                                if msg.startswith(":"):
+                                    msg = msg[1:]
+                                if msg.startswith("\x01") and not msg.startswith("\x01ACTION"):
+                                    writer.write(f":{G.remoteID} 404 {iname} {args[0]} :Unsupported CTCP\r\n".encode("utf-8"))
+                            else:
+                                writer.write(f":{G.remoteID} 404 {iname} {args[0]} :Channel does not exist\r\n".encode("utf-8"))
+                                await writer.drain()
+                        case "kill":
+                            users = G.clientsConnected.keys()
+                            if args[0] in users:
+                                writer.write(f":{G.remoteID} 481 {iname} :Permission Denied- There are no IRC operators here.\r\n".encode("utf-8"))
+                            elif args[0] == G.remoteID:
+                                writer.write(f":{G.remoteID} 483 {iname} :You can't kill me, I'm Skynet!\r\n".encode("utf-8"))
+                            else:
+                                writer.write(f":{G.remoteID} 401 {iname} :{args[0]}\r\n".encode("utf-8"))
+                            await writer.drain()
+                        case "part":
+                            if args[0].lower() == "#main":
+                                clientList = iname + ",".join(G.clientsConnected.keys())
+                                writer.write(f""":{iname} PART #main\r
+:{iname} JOIN #main\r
+:{G.remoteID} 324 {iname} #main t\r
+:{G.remoteID} 332 {iname} #main :Welcome to the main channel!\r
+:{G.remoteID} 353 {iname} = #main :{clientList}\r
+:{G.remoteID} 366 {iname} #main :End of /NAMES list\r\n""".encode("utf8"))
+                            else:
+                                writer.write(f":{G.remoteID} 404 {iname} {args[0]} :Channel does not exist\r\n".encode("utf-8"))
+                                await writer.drain()
+                        case _:
+                            writer.write(f":{G.remoteID} 421 {iname} {cmd} :That isn't supported here.\r\n".encode("utf-8"))
+                            await writer.drain()
+                except TimeoutErrors:
+                    pass
+        elif not name.startswith("S2S-"): # Normal Client logic
+            localQueue = []
             G.clientsConnected[name.lower()] = G.remoteID
             msgIndex = 0
             G.uniqueClients += 1
@@ -254,6 +352,7 @@ Please note that this is not network level statistics.\r\n""".encode(
             del G.clientsConnected[name.lower()]
             G.S2SLogs.append(("-", name, G.remoteID))
         else:  # This is... probably a server?
+            localQueue = []
             sName = name[4:]  # Trim off the S2S label
             if (
                 G.servers.get(sName, False) != False
@@ -309,9 +408,9 @@ Please note that this is not network level statistics.\r\n""".encode(
                         case "S":  # Server notice
                             G.msgs.extend([log(buffer[2:])])
                             writer.write(b"I Mmm... Blueberries\r\n")
-                        case "I":
+                        case "I":  # Ignore lines, ususally responses to everything else
                             pass
-                        case "+":
+                        case "+":  # Add client lines
                             cName = buffer[2:]
                             if cName.lower() not in G.clientsConnected:
                                 G.msgs.append(
@@ -323,7 +422,7 @@ Please note that this is not network level statistics.\r\n""".encode(
                                 writer.write(b"I Mmm... Pineapples\r\n")
                             else:
                                 writer.write(f"K {cName}\r\n".encode("utf8"))
-                        case "-":
+                        case "-":  # Remove client lines
                             cName = buffer[2:]
                             if G.clientsConnected.get(cName.lower(), None) == sName:
                                 G.msgs.append(
@@ -338,8 +437,8 @@ Please note that this is not network level statistics.\r\n""".encode(
                                     f"S Your server is LYING about who is connected to it. - {G.remoteID}, a fellow server\r\n".encode(
                                         "utf8"
                                     )
-                                )
-                        case "M":
+                                )  # Prevents servers from removing users they don't have, propogates in a fun way IIRC
+                        case "M":  # Message lines, standard client stuff
                             cName = buffer[2:].split(G.NUL, 1)[0]
                             message = buffer[2:].split(G.NUL, 1)[1]
                             G.msgs.append(log(f"  {cName}: {message}"))
@@ -347,15 +446,15 @@ Please note that this is not network level statistics.\r\n""".encode(
                             writer.write(
                                 b"I Get these damn heretic ghost clients out of my store so i can buy my cult candles in peace.\r\n"
                             )
-                        case "A":
+                        case "A":  # Action lines, standard client stuff
                             cName = buffer[2:].split(G.NUL, 1)[0]
                             message = buffer[2:].split(G.NUL, 1)[1]
                             G.msgs.append(log(f"* {cName} {message}"))
                             G.S2SLogs.append(("A", (cName, message), sName))
                             writer.write(b"I Mmm... Strawberries\r\n")
-                        case "Q":
+                        case "Q":  # Quit lines
                             break
-                        case "K":
+                        case "K":  # Kill lines
                             cName = buffer[2:]
                             if not G.clientsConnected.get(cName.lower(), False):
                                 pass  # They don't exist, safe to ignore
@@ -366,9 +465,9 @@ Please note that this is not network level statistics.\r\n""".encode(
                                     cName.lower()
                                 ] = True
                             writer.write(b"I Mmm... Blood\r\n")
-                        case _:
+                        case _:  # Everything we *don't* know how to handle
                             writer.write(
-                                f"S Your server is doing drugs over here, sending me bullshit messages man - {G.remoteID}, A fellow server\r\n".encode(
+                                f"S Your server is doing drugs over here, sending me bullshit messages - {G.remoteID}, A fellow server\r\n".encode(
                                     "utf8"
                                 )
                             )
@@ -414,7 +513,7 @@ Please note that this is not network level statistics.\r\n""".encode(
             del G.servers[sName]
             G.msgs.append(log(f"{sName} has de-linked from the network"))
     except DisconnectErrors:
-        if not name:
+        if not name: # pyright: ignore [reportPossiblyUnboundVariable]
             return
         if not name.startswith("S2S-"):
             G.uniqueClients -= 1
