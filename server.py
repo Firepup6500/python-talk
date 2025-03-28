@@ -30,7 +30,16 @@ class Globals:
         dtime = dt.now(tz.utc)
         dtime.replace(tzinfo=tz.utc)
         time = dtime.strftime("%d-%m-%Y at %H:%M:%S UTC")
-        G.IRCStats = {"users": {"localMax": 0, "localCurrent": 0, "globalMax": 0, "globalCurrent": 0}, "servers": 0, "bootTime": time}
+        G.IRCStats = {
+            "users": {
+                "localMax": 0,
+                "localCurrent": 0,
+                "globalMax": 0,
+                "globalCurrent": 0,
+            },
+            "servers": 0,
+            "bootTime": time,
+        }
         G.queue = []
 
 
@@ -120,7 +129,9 @@ if len(G.remoteID) > 16:
     G.remoteID = G.remoteID[:15]
 
 
-async def getMessage(reader, localQueue: list, size: int = 0, timeout: float = 0, sanitize: bool = False) -> tuple[str, list[str]]:
+async def getMessage(
+    reader, localQueue: list, size: int = 0, timeout: float = 0, sanitize: bool = False
+) -> tuple[str, list[str]]:
     if not localQueue:
         data = b""
         if timeout and timeout > 0:
@@ -162,7 +173,7 @@ async def handleClient(reader, writer):
         writer.write(b"Please identify yourself. Nick limit is 20 chars.\r\n")
         await writer.drain()
         name, localQueue = await getMessage(reader, [], 20, 0, True)
-        #log(f"{localQueue}", "DEBUG")
+        # log(f"{localQueue}", "DEBUG")
         if len(name) > 20:
             name = name[
                 :19
@@ -193,9 +204,10 @@ async def handleClient(reader, writer):
             name = iname
             G.msgs.extend([log(f"{iname} has connected to the server.")])
             G.S2SLogs.append(("+", iname, G.remoteID))
-            localQueue = [] # Discard "USER" data
+            localQueue = []  # Discard "USER" data
             clientList = iname + ",".join(G.clientsConnected.keys())
-            writer.write(f""":{G.remoteID} 001 {iname} :Welcome to the python-talk Network, {iname}\r
+            writer.write(
+                f""":{G.remoteID} 001 {iname} :Welcome to the python-talk Network, {iname}\r
 :{G.remoteID} 002 {iname} :Your host is {G.remoteID}, running version 0.1\r
 :{G.remoteID} 003 {iname} :This server was created on {G.IRCStats["bootTime"]}\r
 :{G.remoteID} 004 {iname} python-talk 0.1 r t\r
@@ -214,66 +226,119 @@ async def handleClient(reader, writer):
 :{G.remoteID} 324 {iname} #main t\r
 :{G.remoteID} 332 {iname} #main :Welcome to the main channel!\r
 :{G.remoteID} 353 {iname} = #main :{clientList}\r
-:{G.remoteID} 366 {iname} #main :End of /NAMES list\r\n""".encode("utf8"))
+:{G.remoteID} 366 {iname} #main :End of /NAMES list\r\n""".encode(
+                    "utf8"
+                )
+            )
             await writer.drain()
             msgIndex = len(G.msgs)
             while 1:
                 try:
-                    request, localQueue = await getMessage(reader, localQueue, 967, 0.1, False)
+                    request, localQueue = await getMessage(
+                        reader, localQueue, 967, 0.1, False
+                    )
                     request = request.replace(G.NUL, "\\x1e")
                     response = None
                     log(request, "DEBUG")
                     cmd = request.split(" ")[0].lower()
                     args = request.split(" ")[1:]
                     if len(args) == 0:
-                        args = ["you-gave-me-an-invalid-command-why-would-you-do-this-to-me"]
+                        args = [
+                            "you-gave-me-an-invalid-command-why-would-you-do-this-to-me"
+                        ]
                     match cmd:
                         case "ping":
-                            writer.write(f":{G.remoteID} PONG {G.remoteID} :{' '.join(args)}\r\n".encode("utf-8"))
+                            writer.write(
+                                f":{G.remoteID} PONG {G.remoteID} :{' '.join(args)}\r\n".encode(
+                                    "utf-8"
+                                )
+                            )
                             await writer.drain()
                         case "join":
                             if args[0].lower() == "#main":
-                                writer.write(f":{G.remoteID} 443 {iname} {iname} #main :You're already in #main, and you cannot leave\r\n".encode("utf-8"))
+                                writer.write(
+                                    f":{G.remoteID} 443 {iname} {iname} #main :You're already in #main, and you cannot leave\r\n".encode(
+                                        "utf-8"
+                                    )
+                                )
                             else:
-                                writer.write(f":{G.remoteID} 405 {iname} {args[0]} :Only #main exists.\r\n".encode("utf-8"))
+                                writer.write(
+                                    f":{G.remoteID} 405 {iname} {args[0]} :Only #main exists.\r\n".encode(
+                                        "utf-8"
+                                    )
+                                )
                             await writer.drain()
                         case "privmsg":
                             if args[0].lower() == "#main":
                                 msg = " ".join(args[1:])
                                 if msg.startswith(":"):
                                     msg = msg[1:]
-                                if msg.startswith("\x01") and not msg.startswith("\x01ACTION"):
-                                    writer.write(f":{G.remoteID} 404 {iname} {args[0]} :Unsupported CTCP\r\n".encode("utf-8"))
+                                if msg.startswith("\x01") and not msg.startswith(
+                                    "\x01ACTION"
+                                ):
+                                    writer.write(
+                                        f":{G.remoteID} 404 {iname} {args[0]} :Unsupported CTCP\r\n".encode(
+                                            "utf-8"
+                                        )
+                                    )
                             else:
-                                writer.write(f":{G.remoteID} 404 {iname} {args[0]} :Channel does not exist\r\n".encode("utf-8"))
+                                writer.write(
+                                    f":{G.remoteID} 404 {iname} {args[0]} :Channel does not exist\r\n".encode(
+                                        "utf-8"
+                                    )
+                                )
                                 await writer.drain()
                         case "kill":
                             users = G.clientsConnected.keys()
                             if args[0] in users:
-                                writer.write(f":{G.remoteID} 481 {iname} :Permission Denied- There are no IRC operators here.\r\n".encode("utf-8"))
+                                writer.write(
+                                    f":{G.remoteID} 481 {iname} :Permission Denied- There are no IRC operators here.\r\n".encode(
+                                        "utf-8"
+                                    )
+                                )
                             elif args[0] == G.remoteID:
-                                writer.write(f":{G.remoteID} 483 {iname} :You can't kill me, I'm Skynet!\r\n".encode("utf-8"))
+                                writer.write(
+                                    f":{G.remoteID} 483 {iname} :You can't kill me, I'm Skynet!\r\n".encode(
+                                        "utf-8"
+                                    )
+                                )
                             else:
-                                writer.write(f":{G.remoteID} 401 {iname} :{args[0]}\r\n".encode("utf-8"))
+                                writer.write(
+                                    f":{G.remoteID} 401 {iname} :{args[0]}\r\n".encode(
+                                        "utf-8"
+                                    )
+                                )
                             await writer.drain()
                         case "part":
                             if args[0].lower() == "#main":
                                 clientList = iname + ",".join(G.clientsConnected.keys())
-                                writer.write(f""":{iname} PART #main\r
+                                writer.write(
+                                    f""":{iname} PART #main\r
 :{iname} JOIN #main\r
 :{G.remoteID} 324 {iname} #main t\r
 :{G.remoteID} 332 {iname} #main :Welcome to the main channel!\r
 :{G.remoteID} 353 {iname} = #main :{clientList}\r
-:{G.remoteID} 366 {iname} #main :End of /NAMES list\r\n""".encode("utf8"))
+:{G.remoteID} 366 {iname} #main :End of /NAMES list\r\n""".encode(
+                                        "utf8"
+                                    )
+                                )
                             else:
-                                writer.write(f":{G.remoteID} 404 {iname} {args[0]} :Channel does not exist\r\n".encode("utf-8"))
+                                writer.write(
+                                    f":{G.remoteID} 404 {iname} {args[0]} :Channel does not exist\r\n".encode(
+                                        "utf-8"
+                                    )
+                                )
                                 await writer.drain()
                         case _:
-                            writer.write(f":{G.remoteID} 421 {iname} {cmd} :That isn't supported here.\r\n".encode("utf-8"))
+                            writer.write(
+                                f":{G.remoteID} 421 {iname} {cmd} :That isn't supported here.\r\n".encode(
+                                    "utf-8"
+                                )
+                            )
                             await writer.drain()
                 except TimeoutErrors:
                     pass
-        elif not name.startswith("S2S-"): # Normal Client logic
+        elif not name.startswith("S2S-"):  # Normal Client logic
             localQueue = []
             G.clientsConnected[name.lower()] = G.remoteID
             msgIndex = 0
@@ -282,7 +347,9 @@ async def handleClient(reader, writer):
             G.S2SLogs.append(("+", name, G.remoteID))
             while 1:
                 try:
-                    request, localQueue = await getMessage(reader, localQueue, 967, 0.1, True)
+                    request, localQueue = await getMessage(
+                        reader, localQueue, 967, 0.1, True
+                    )
                     response = None
                     if request.startswith("/mes "):
                         response = log(f"* {name}'s {request[5:]}")
@@ -403,7 +470,9 @@ Please note that this is not network level statistics.\r\n""".encode(
             msgInd = len(G.S2SLogs)
             while 1:
                 try:
-                    buffer, localQueue = await getMessage(reader, localQueue, 1024, 0.1, False)
+                    buffer, localQueue = await getMessage(
+                        reader, localQueue, 1024, 0.1, False
+                    )
                     match buffer[0]:
                         case "S":  # Server notice
                             G.msgs.extend([log(buffer[2:])])
@@ -513,7 +582,7 @@ Please note that this is not network level statistics.\r\n""".encode(
             del G.servers[sName]
             G.msgs.append(log(f"{sName} has de-linked from the network"))
     except DisconnectErrors:
-        if not name: # pyright: ignore [reportPossiblyUnboundVariable]
+        if not name:  # pyright: ignore [reportPossiblyUnboundVariable]
             return
         if not name.startswith("S2S-"):
             G.uniqueClients -= 1
@@ -591,7 +660,9 @@ async def connectServer(hostname: str, port: int):
         try:
             while 1:
                 try:
-                    buffer, localQueue = await getMessage(reader, localQueue, 1024, 0.1, False)
+                    buffer, localQueue = await getMessage(
+                        reader, localQueue, 1024, 0.1, False
+                    )
                     match buffer[0]:
                         case "S":
                             G.msgs.extend([log(buffer[2:])])
@@ -731,11 +802,11 @@ async def runServer(address: str, port: int):
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Reuse socket
         sock.bind((address, port))
     except OSError as E:
-        if E.errno != 97 or address != '::':
+        if E.errno != 97 or address != "::":
             raise E
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Reuse socket
-        sock.bind(('0.0.0.0', port))
+        sock.bind(("0.0.0.0", port))
     server = await asyncio.start_server(handleClient, sock=sock)
     log(f"Listening on port {port}...")
     G.msgs.append(log("Server startup"))
