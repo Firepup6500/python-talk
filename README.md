@@ -68,4 +68,4 @@ Feel free to suggest anything you'd like to see implemented into this little pro
 
 If you'd like to link up with what I'm currently considering the "hub" instance, let me know directly! I'm always happy to have a bigger network! ;)
 
-Found a bug? Reach out to me, or file it in a new issue here (or work on it yourself, and PR it ;P) and I'll get around to reviewing and fixing fairly quickly, hopefullh.
+Found a bug? Reach out to me, or file it in a new issue here (or work on it yourself, and PR it ;P) and I'll get around to reviewing and fixing fairly quickly, hopefully.
